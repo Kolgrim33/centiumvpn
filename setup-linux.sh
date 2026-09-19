@@ -36,7 +36,7 @@ else
 fi
 
 # 1. Install Required Packages
-echo "[1/6] Installing core dependencies (tor, iptables, iproute2)..."
+echo "[1/8] Installing core dependencies (tor, iptables, iproute2, curl, nodejs, npm)..."
 case "$DISTRO" in
     arch)
         pacman -Sy --needed --noconfirm tor iptables iproute2 curl nodejs npm
@@ -50,43 +50,28 @@ case "$DISTRO" in
         ;;
 esac
 
-# 2. Setup Centium Runtime Directories
-echo "[2/6] Creating runtime directories (/run/centium, /var/lib/centium)..."
+# 2. Stop default system Tor service so port 9050 is not locked
+echo "[2/8] Stopping unmanaged default system Tor service to release port 9050..."
+systemctl stop tor 2>/dev/null || true
+systemctl disable tor 2>/dev/null || true
+
+# 3. Setup Centium Runtime Directories
+echo "[3/8] Creating runtime directories (/run/centium, /var/lib/centium/tor, /opt/centium)..."
 mkdir -p /run/centium
-mkdir -p /var/lib/centium
+mkdir -p /var/lib/centium/tor
 chmod 755 /run/centium
-chmod 700 /var/lib/centium
+chmod 700 /var/lib/centium/tor
 
-# 3. Install System Routing Script
-echo "[3/6] Installing /usr/local/bin/centium-routing..."
-cp "$DIR/linux/centium-routing.sh" /usr/local/bin/centium-routing
-chmod 755 /usr/local/bin/centium-routing
+# Set correct ownership for Tor
+if id "tor" &>/dev/null; then
+    chown -R tor:tor /var/lib/centium/tor
+elif id "debian-tor" &>/dev/null; then
+    chown -R debian-tor:debian-tor /var/lib/centium/tor
+fi
 
-# 4. Sudoers rule so Centium can manage transparent routing without password prompts
-echo "[4/6] Configuring passwordless sudo for routing manager (/etc/sudoers.d/centium)..."
-cat << 'EOF' > /etc/sudoers.d/centium
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing enable
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing disable
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing status
-EOF
-chmod 440 /etc/sudoers.d/centium
-
-# 5. Install Desktop Launcher & Icons
-echo "[5/6] Installing Desktop Application Launcher..."
-cat << EOF > /usr/local/bin/centium
-#!/usr/bin/env bash
-exec "$DIR/centium-desktop.sh" "\$@"
-EOF
-chmod 755 /usr/local/bin/centium
-chmod +x "$DIR/centium-desktop.sh"
-
-# Install icon & desktop entry
-mkdir -p /usr/share/icons/hicolor/scalable/apps
-cp "$DIR/public/favicon.svg" /usr/share/icons/hicolor/scalable/apps/centium.svg 2>/dev/null || true
-cp "$DIR/linux/centium.desktop" /usr/share/applications/centium.desktop 2>/dev/null || true
-
-# 6. Build App
-echo "[6/6] Building Centium application..."
+# 4. Build application
+echo "[4/8] Building Centium application..."
+cd "$DIR"
 if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
     sudo -u "$REAL_USER" npm install
     sudo -u "$REAL_USER" npm run build
@@ -95,16 +80,74 @@ else
     npm run build
 fi
 
+# Deploy to /opt/centium
+mkdir -p /opt/centium
+cp -r "$DIR"/* /opt/centium/ 2>/dev/null || true
+# Ensure node_modules exists in /opt/centium
+if [ -d "$DIR/node_modules" ] && [ ! -d "/opt/centium/node_modules" ]; then
+    cp -r "$DIR/node_modules" /opt/centium/
+fi
+
+# 5. Install System Routing Script
+echo "[5/8] Installing /usr/local/bin/centium-routing and /usr/bin/centium-routing..."
+cp "$DIR/linux/centium-routing.sh" /usr/local/bin/centium-routing
+cp "$DIR/linux/centium-routing.sh" /usr/bin/centium-routing
+chmod 755 /usr/local/bin/centium-routing /usr/bin/centium-routing
+
+# 6. Sudoers rule so Centium can manage transparent routing without password prompts
+echo "[6/8] Configuring passwordless sudo rules (/etc/sudoers.d/centium)..."
+cat << 'EOF' > /etc/sudoers.d/centium
+ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing enable
+ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing disable
+ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing status
+ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing enable
+ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing disable
+ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing status
+ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop tor
+ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl start tor
+ALL ALL=(ALL) NOPASSWD: /usr/bin/killall tor
+ALL ALL=(ALL) NOPASSWD: /usr/bin/pkill -9 tor
+ALL ALL=(ALL) NOPASSWD: /usr/bin/pkill -9 -f ^tor
+EOF
+chmod 440 /etc/sudoers.d/centium
+
+# 7. Install Centium Daemon & Systemd Service
+echo "[7/8] Installing centiumd executable and systemd service..."
+cp "$DIR/linux/centiumd" /usr/bin/centiumd
+chmod 755 /usr/bin/centiumd
+
+cp "$DIR/linux/centiumd.service" /etc/systemd/system/centiumd.service
+systemctl daemon-reload
+systemctl enable --now centiumd || echo "[!] Notice: centiumd service enabled"
+
+# 8. Install Desktop Launcher & Icons
+echo "[8/8] Installing Desktop Application Launcher and Icons..."
+cat << 'EOF' > /usr/bin/centium
+#!/usr/bin/env bash
+if [ -f "/opt/centium/centium-desktop.sh" ]; then
+    exec "/opt/centium/centium-desktop.sh" "$@"
+else
+    DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+    exec "$DIR/centium-desktop.sh" "$@"
+fi
+EOF
+chmod 755 /usr/bin/centium
+cp /usr/bin/centium /usr/local/bin/centium 2>/dev/null || true
+
+# Install icon & desktop entry
+mkdir -p /usr/share/icons/hicolor/scalable/apps
+cp "$DIR/public/favicon.svg" /usr/share/icons/hicolor/scalable/apps/centium.svg 2>/dev/null || true
+cp "$DIR/linux/centium.desktop" /usr/share/applications/centium.desktop 2>/dev/null || true
+
 echo "========================================================"
-echo "[✓] Centium VPN is installed and ready on your Arch system!"
+echo "[✓] Centium VPN is fully installed and active on your Arch system!"
 echo ""
-echo "How to run Centium as a native desktop application:"
-echo "  • From anywhere in your terminal:  centium"
-echo "  • Or from your project folder:    ./centium-desktop.sh"
-echo "  • Or from your App Launcher:      search 'Centium VPN'"
+echo "Core Daemon Status:"
+systemctl status centiumd --no-pager || true
 echo ""
-echo "To test transparent routing manually at any time:"
-echo "  sudo centium-routing enable"
-echo "  curl https://check.torproject.org/api/ip"
-echo "  sudo centium-routing disable"
+echo "To launch the native desktop application:"
+echo "  centium"
+echo ""
+echo "Or from your application launcher (Rofi, Dmenu, GNOME, KDE):"
+echo "  Search for 'Centium VPN'"
 echo "========================================================"

@@ -1,23 +1,18 @@
 export const CENTIUM_SYSTEMD_SERVICE = `[Unit]
-Description=Centium VPN Privileged Daemon
+Description=Centium VPN Core Daemon
 After=network.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/centiumd --socket /run/centium/centium.sock
-Restart=on-failure
+WorkingDirectory=/opt/centium
+ExecStart=/usr/bin/centiumd
+Restart=always
 RestartSec=3s
+Environment=NODE_ENV=production
 RuntimeDirectory=centium
 RuntimeDirectoryMode=0755
-
-# Security hardening
-ProtectSystem=strict
-ProtectHome=read-only
-PrivateTmp=true
-ProtectControlGroups=true
-ReadWritePaths=/run/centium /var/lib/centium /etc/resolv.conf
 
 [Install]
 WantedBy=multi-user.target
@@ -25,64 +20,72 @@ WantedBy=multi-user.target
 
 export const CENTIUM_ROUTING_SCRIPT = `#!/usr/bin/env bash
 # Centium VPN - Transparent Tor Routing & Kill Switch Manager
-# Supports both iptables and nftables
+# Compatible with: Arch Linux (tor user), Debian/Ubuntu (debian-tor), Fedora
 
 set -euo pipefail
 
-TOR_UID="\${TOR_UID:-debian-tor}"
+if [ -n "\${CENTIUM_TOR_UID:-}" ]; then
+    TOR_UID="\$CENTIUM_TOR_UID"
+elif id "tor" &>/dev/null; then
+    TOR_UID="tor"
+elif id "debian-tor" &>/dev/null; then
+    TOR_UID="debian-tor"
+else
+    TOR_UID="\$(id -un)"
+fi
+
 TRANS_PORT="\${TRANS_PORT:-9040}"
 DNS_PORT="\${DNS_PORT:-5353}"
-TUN_DEV="centium0"
 RESOLV_BACKUP="/run/centium/resolv.conf.backup"
 
-enable_routing() {
-    echo "[Centium] Enabling system-wide routing via Tor..."
+verify_prerequisites() {
+    if command -v ss &>/dev/null; then
+        if ! ss -tln | grep -q ":\${TRANS_PORT}\\b"; then
+            echo "[Centium Error] Tor TransPort :\${TRANS_PORT} is not listening!" >&2
+            return 1
+        fi
+    fi
+    return 0
+}
 
-    # 1. Back up system DNS
-    if [ -f /etc/resolv.conf ] && [ ! -f "$RESOLV_BACKUP" ]; then
-        mkdir -p /run/centium
-        cp /etc/resolv.conf "$RESOLV_BACKUP"
+enable_routing() {
+    verify_prerequisites || exit 1
+    echo "[Centium] Enabling system-wide routing via Tor (Tor user: \$TOR_UID)..."
+
+    mkdir -p /run/centium
+    if [ -f /etc/resolv.conf ] && [ ! -f "\$RESOLV_BACKUP" ]; then
+        cp /etc/resolv.conf "\$RESOLV_BACKUP" 2>/dev/null || true
+    fi
+    echo "nameserver 127.0.0.1" > /etc/resolv.conf 2>/dev/null || true
+
+    if command -v ip6tables &>/dev/null; then
+        ip6tables -P INPUT DROP 2>/dev/null || true
+        ip6tables -P OUTPUT DROP 2>/dev/null || true
+        ip6tables -P FORWARD DROP 2>/dev/null || true
+        ip6tables -A OUTPUT -o lo -j ACCEPT 2>/dev/null || true
     fi
 
-    # 2. Set DNS to local Tor DNSPort (127.0.0.1:5353)
-    echo "nameserver 127.0.0.1" > /etc/resolv.conf
+    if command -v iptables &>/dev/null; then
+        iptables -t nat -N CENTIUM_NAT 2>/dev/null || iptables -t nat -F CENTIUM_NAT
+        iptables -t nat -A CENTIUM_NAT -p udp --dport 53 -j REDIRECT --to-ports "\$DNS_PORT"
+        iptables -t nat -A CENTIUM_NAT -p tcp --dport 53 -j REDIRECT --to-ports "\$DNS_PORT"
+        iptables -t nat -A CENTIUM_NAT -m owner --uid-owner "\$TOR_UID" -j RETURN 2>/dev/null || true
+        iptables -t nat -A CENTIUM_NAT -d 127.0.0.0/8 -j RETURN
+        iptables -t nat -A CENTIUM_NAT -p tcp --syn -j REDIRECT --to-ports "\$TRANS_PORT"
 
-    # 3. Block all IPv6 traffic to prevent IPv6 bypass leaks
-    ip6tables -P INPUT DROP || true
-    ip6tables -P OUTPUT DROP || true
-    ip6tables -P FORWARD DROP || true
-    ip6tables -A OUTPUT -o lo -j ACCEPT || true
+        iptables -t nat -D OUTPUT -j CENTIUM_NAT 2>/dev/null || true
+        iptables -t nat -A OUTPUT -j CENTIUM_NAT
 
-    # 4. Flush existing Centium chains
-    iptables -t nat -N CENTIUM_NAT 2>/dev/null || iptables -t nat -F CENTIUM_NAT
-    iptables -t filter -N CENTIUM_FILTER 2>/dev/null || iptables -t filter -F CENTIUM_FILTER
+        iptables -t filter -N CENTIUM_FILTER 2>/dev/null || iptables -t filter -F CENTIUM_FILTER
+        iptables -t filter -A CENTIUM_FILTER -o lo -j ACCEPT
+        iptables -t filter -A CENTIUM_FILTER -m owner --uid-owner "\$TOR_UID" -j ACCEPT 2>/dev/null || true
+        iptables -t filter -A CENTIUM_FILTER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+            iptables -t filter -A CENTIUM_FILTER -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+        iptables -t filter -A CENTIUM_FILTER -j DROP
 
-    # 5. NAT redirection (Transparent TCP Proxy & DNS)
-    # Redirect DNS traffic (UDP port 53) to Tor DNSPort
-    iptables -t nat -A CENTIUM_NAT -p udp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
-    # Exclude Tor daemon process user from loop redirection
-    iptables -t nat -A CENTIUM_NAT -m owner --uid-owner "$TOR_UID" -j RETURN
-    # Exclude local loopback traffic
-    iptables -t nat -A CENTIUM_NAT -d 127.0.0.0/8 -j RETURN
-    # Redirect all remaining TCP traffic to Tor TransPort
-    iptables -t nat -A CENTIUM_NAT -p tcp --syn -j REDIRECT --to-ports "$TRANS_PORT"
-
-    # Link into OUTPUT chain
-    iptables -t nat -D OUTPUT -j CENTIUM_NAT 2>/dev/null || true
-    iptables -t nat -A OUTPUT -j CENTIUM_NAT
-
-    # 6. Kill Switch (Fail-closed filter rules)
-    # Allow local loopback
-    iptables -t filter -A CENTIUM_FILTER -o lo -j ACCEPT
-    # Allow Tor daemon traffic to establish connections to relays
-    iptables -t filter -A CENTIUM_FILTER -m owner --uid-owner "$TOR_UID" -j ACCEPT
-    # Allow established and related connections
-    iptables -t filter -A CENTIUM_FILTER -m state --state ESTABLISHED,RELATED -j ACCEPT
-    # Drop all non-Tor egress (Kill Switch)
-    iptables -t filter -A CENTIUM_FILTER -j DROP
-
-    iptables -t filter -D OUTPUT -j CENTIUM_FILTER 2>/dev/null || true
-    iptables -t filter -A OUTPUT -j CENTIUM_FILTER
+        iptables -t filter -D OUTPUT -j CENTIUM_FILTER 2>/dev/null || true
+        iptables -t filter -A OUTPUT -j CENTIUM_FILTER
+    fi
 
     echo "[Centium] System routing active. Traffic safely contained in Tor network."
 }

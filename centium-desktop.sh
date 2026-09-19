@@ -41,6 +41,8 @@ elif command -v google-chrome-stable &>/dev/null; then
     exec google-chrome-stable --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v google-chrome &>/dev/null; then
     exec google-chrome --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
+elif command -v brave-browser &>/dev/null; then
+    exec brave-browser --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v brave &>/dev/null; then
     exec brave --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v flatpak &>/dev/null && flatpak info org.chromium.Chromium &>/dev/null; then

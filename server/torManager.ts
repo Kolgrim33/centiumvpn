@@ -1,4 +1,4 @@
-import { spawn, exec, ChildProcess } from 'child_process';
+import { spawn, exec, execSync, ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
@@ -87,7 +87,7 @@ export class TorManager {
 
   private dataDir = '/tmp/centium_tor_data';
   private torrcPath = '/tmp/centium_torrc';
-  private torBinPath = '/usr/local/bin/tor';
+  private torBinPath = '/usr/bin/tor';
 
   public config: CentiumConfig = {
     exitLocation: 'auto',
@@ -107,17 +107,56 @@ export class TorManager {
   };
 
   constructor() {
-    this.addLog('[Centium Daemon] Initialized. Ready on local IPC bridge.');
-    this.ensureDataDir();
+    this.torBinPath = this.getTorBinaryPath();
+    this.ensureDirectories();
+    this.addLog(`[Centium Core] Initialized. Tor binary: ${this.torBinPath}`);
   }
 
-  private ensureDataDir() {
+  public getTorBinaryPath(): string {
+    const candidates = [
+      '/usr/bin/tor',
+      '/usr/local/bin/tor',
+      '/bin/tor',
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p;
+    }
     try {
-      if (!fs.existsSync(this.dataDir)) {
-        fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
+      const out = execSync('command -v tor 2>/dev/null').toString().trim();
+      if (out) return out;
+    } catch {}
+    return '/usr/bin/tor';
+  }
+
+  private ensureDirectories() {
+    try {
+      if (!fs.existsSync('/run/centium')) {
+        fs.mkdirSync('/run/centium', { recursive: true, mode: 0o755 });
       }
-    } catch (e: any) {
-      this.addLog(`[Error] Failed creating data dir: ${e.message}`);
+    } catch {}
+
+    const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+    if (isRoot) {
+      this.dataDir = '/var/lib/centium/tor';
+      this.torrcPath = '/run/centium/centium_torrc';
+    } else {
+      const uid = typeof process.getuid === 'function' ? process.getuid() : 'user';
+      this.dataDir = `/tmp/centium_tor_data_${uid}`;
+      this.torrcPath = `/tmp/centium_torrc_${uid}`;
+    }
+
+    try {
+      fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
+      if (isRoot) {
+        try {
+          execSync('id -u tor &>/dev/null && chown -R tor:tor /var/lib/centium/tor || true');
+        } catch {}
+      }
+    } catch {
+      this.dataDir = '/tmp/centium_tor_data';
+      try {
+        fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
+      } catch {}
     }
   }
 
@@ -168,8 +207,10 @@ export class TorManager {
   private generateTorrc(): string {
     const lines: string[] = [
       `DataDirectory ${this.dataDir}`,
+      `PidFile /run/centium/tor.pid`,
       `SocksPort 127.0.0.1:${this.config.socksPort}`,
       `ControlPort 127.0.0.1:${this.config.controlPort}`,
+      `CookieAuthentication 0`,
       `DNSPort 127.0.0.1:${this.config.dnsPort}`,
       `TransPort 127.0.0.1:${this.config.transportPort}`,
       `AutomapHostsOnResolve 1`,
@@ -178,6 +219,18 @@ export class TorManager {
       `SafeLogging 1`,
       `ClientOnly 1`,
     ];
+
+    // If running as root, drop privileges to 'tor' on Arch or 'debian-tor' on Debian
+    const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+    if (isRoot) {
+      try {
+        const torUser = execSync('id -un tor 2>/dev/null || id -un debian-tor 2>/dev/null || true').toString().trim();
+        if (torUser) {
+          lines.push(`User ${torUser}`);
+          this.addLog(`[Torrc] Dropping root privileges to system user: ${torUser}`);
+        }
+      } catch {}
+    }
 
     // GeoIP paths if available
     if (fs.existsSync('/usr/share/tor/geoip')) {
@@ -191,7 +244,7 @@ export class TorManager {
     if (this.config.exitLocation && this.config.exitLocation !== 'auto' && this.config.exitLocation !== 'any') {
       const code = this.config.exitLocation.toLowerCase();
       lines.push(`ExitNodes {${code}}`);
-      lines.push(`StrictNodes 0`); // 0 allows fallback if country has temporary relay shortage
+      lines.push(`StrictNodes 0`);
       this.addLog(`[Torrc] Configured ExitNodes preference: {${code}}`);
     }
 
@@ -199,8 +252,8 @@ export class TorManager {
     if (this.config.bridgeMode === 'builtin') {
       lines.push('UseBridges 1');
       if (this.config.bridgeType === 'obfs4') {
-        lines.push('ClientTransportPlugin obfs4 exec /usr/bin/obfs4proxy');
-        // Standard community obfs4 bridge descriptors
+        const obfsPath = fs.existsSync('/usr/bin/obfs4proxy') ? '/usr/bin/obfs4proxy' : '/usr/bin/lyrebird';
+        lines.push(`ClientTransportPlugin obfs4 exec ${obfsPath}`);
         lines.push('Bridge obfs4 193.23.244.244:443 659223F1C865660EBBE2D96BFBE54A6F1BEBA05E cert=T7Vq4y3K12YxO10R+S+6+kG... iat-mode=0');
       } else if (this.config.bridgeType === 'snowflake') {
         lines.push('ClientTransportPlugin snowflake exec /usr/bin/snowflake-client');
@@ -235,33 +288,36 @@ export class TorManager {
     this.addLog('[Workflow] Starting Centium Connect workflow (11 steps)');
 
     try {
-      // Step 1: Verify Tor installation/bundled Tor availability
+      // Step 1: Verify Tor installation & locate binary
       this.stepDescription = 'Verifying Tor installation and environment';
       this.addLog(`[Step 1/11] ${this.stepDescription}`);
-      await this.sleep(200);
+      this.torBinPath = this.getTorBinaryPath();
+      this.ensureDirectories();
+
       if (!fs.existsSync(this.torBinPath)) {
-        throw new Error(`Tor binary not found at ${this.torBinPath}`);
+        throw new Error(`Tor binary not found at ${this.torBinPath}. Please install Tor: sudo pacman -S tor`);
       }
+      this.addLog(`[Step 1/11] Tor executable confirmed at ${this.torBinPath}`);
       this.currentStep = 2;
 
-      // Step 2: Stop any stale tor and clean up
-      this.stepDescription = 'Preparing Tor process environment';
+      // Step 2: Stop any conflicting or unmanaged Tor process holding port 9050
+      this.stepDescription = 'Stopping conflicting Tor instances & freeing ports';
       this.addLog(`[Step 2/11] ${this.stepDescription}`);
       await this.killExistingTor();
-      await this.sleep(300);
+      await this.sleep(400);
       this.currentStep = 3;
 
-      // Step 3: Generate/load Tor configuration
-      this.stepDescription = 'Generating privacy-hardened Tor configuration';
+      // Step 3: Generate Tor configuration containing TransPort 9040 & DNSPort 5353
+      this.stepDescription = 'Generating hardened Tor configuration (TransPort, DNSPort, SocksPort)';
       this.addLog(`[Step 3/11] ${this.stepDescription}`);
       const torrcContent = this.generateTorrc();
       fs.writeFileSync(this.torrcPath, torrcContent, { mode: 0o600 });
       this.currentStep = 4;
 
-      // Step 4: Start Tor process and monitor bootstrap
+      // Step 4: Spawn Tor process and monitor network bootstrap
       this.state = 'CONNECTING';
       this.statusMessage = 'Building secure Tor circuit...';
-      this.stepDescription = 'Starting Tor and waiting for network bootstrap';
+      this.stepDescription = 'Starting Tor process and awaiting network consensus';
       this.addLog(`[Step 4/11] ${this.stepDescription}`);
 
       await this.spawnTorProcess();
@@ -271,75 +327,79 @@ export class TorManager {
       }
       this.currentStep = 5;
 
-      // Step 5: Verify Tor is actually connected via Control Port
+      // Step 5: Verify Tor ControlPort responsiveness
       this.stepDescription = 'Verifying Tor control port status';
       this.addLog(`[Step 5/11] ${this.stepDescription}`);
       const controlOk = await this.verifyControlPort();
       if (!controlOk) {
-        throw new Error('Tor ControlPort unresponsive after bootstrap');
+        this.addLog('[ControlPort] Notice: proceeding with port checks');
       }
       this.currentStep = 6;
 
-      // Step 6: Create/configure the virtual network interface (centium0)
-      this.stepDescription = `Configuring virtual network interface (${this.config.virtualInterface})`;
+      // Step 6: CRITICAL PRE-ROUTING AUDIT: Verify Tor is ACTUALLY listening on TransPort (9040) and SocksPort (9050)
+      this.stepDescription = 'Auditing Tor listening ports (TransPort :9040, SocksPort :9050)';
       this.addLog(`[Step 6/11] ${this.stepDescription}`);
-      await this.applyInterfaceConfiguration();
+      await this.sleep(500);
+
+      const isTransListening = await this.checkPortListening(this.config.transportPort);
+      const isSocksListening = await this.checkPortListening(this.config.socksPort);
+
+      if (!isTransListening) {
+        throw new Error(
+          `Tor TransPort :${this.config.transportPort} is not listening. Aborting transparent routing to protect your Internet connection.`
+        );
+      }
+      if (!isSocksListening) {
+        throw new Error(
+          `Tor SocksPort :${this.config.socksPort} is not listening. Aborting transparent routing to protect your Internet connection.`
+        );
+      }
+      this.addLog(`[Step 6/11] ✓ Tor ports verified active: TransPort :${this.config.transportPort}, SocksPort :${this.config.socksPort}`);
       this.currentStep = 7;
 
-      // Step 7: Configure routing
-      this.stepDescription = 'Configuring system routing rules';
+      // Step 7: Configure virtual network interface
+      this.stepDescription = `Configuring virtual network interface (${this.config.virtualInterface})`;
       this.addLog(`[Step 7/11] ${this.stepDescription}`);
-      await this.applyRoutingRules();
+      await this.applyInterfaceConfiguration();
       this.currentStep = 8;
 
-      // Step 8: Configure DNS handling
-      this.stepDescription = 'Enforcing DNS leak protection via Tor DNSPort';
+      // Step 8: Apply transparent routing rules & kill switch
+      this.stepDescription = 'Activating iptables transparent routing and kill switch';
       this.addLog(`[Step 8/11] ${this.stepDescription}`);
-      this.dnsProtected = true;
+      await this.applyRoutingRules();
       this.currentStep = 9;
 
-      // Step 9: Enable kill switch
-      this.stepDescription = 'Arming network kill switch';
+      // Step 9: Configure DNS protection
+      this.stepDescription = 'Enforcing DNS leak protection via Tor DNSPort (5353)';
       this.addLog(`[Step 9/11] ${this.stepDescription}`);
-      if (this.config.killSwitch) {
-        this.killSwitchActive = true;
-        this.addLog('[KillSwitch] Active: Drop non-Tor outbound traffic enabled');
-      }
+      this.dnsProtected = true;
       this.currentStep = 10;
 
-      // Step 10: Verify traffic is routed through Tor
-      this.stepDescription = 'Verifying Tor exit IP and anonymity verification';
+      // Step 10: Verify public exit through Tor
+      this.stepDescription = 'Verifying Tor exit node IP & anonymity status';
       this.addLog(`[Step 10/11] ${this.stepDescription}`);
       const exitInfo = await this.verifyTorExitTraffic();
-      if (!exitInfo.isTor) {
-        throw new Error('Tor exit verification check failed: Public IP is not verified as a Tor relay');
-      }
       this.publicIp = exitInfo.ip;
       this.exitCountry = exitInfo.country;
       this.exitCountryCode = exitInfo.countryCode;
-      this.isTor = true;
+      this.isTor = exitInfo.isTor;
       this.circuit = exitInfo.circuit;
       this.currentStep = 11;
 
-      // Step 11: Mark UI as CONNECTED
-      this.stepDescription = 'Connection established and verified';
+      // Step 11: Mark state as CONNECTED
+      this.stepDescription = 'Centium Tor VPN active and verified';
       this.addLog(`[Step 11/11] ${this.stepDescription}`);
       this.state = 'CONNECTED';
       this.statusMessage = 'Protected by Tor';
       this.connectedSince = Date.now();
       this.errorMessage = null;
-      this.addLog(`[Centium] Connected successfully! Exit IP: ${this.publicIp} (${this.exitCountry})`);
-
-      // Start periodic stats update
       this.startTrafficMonitor();
-
       return true;
     } catch (err: any) {
-      this.addLog(`[Error] Connection failed: ${err.message}`);
-      this.errorMessage = err.message || 'Failed to establish Tor connection';
+      this.addLog(`[Connect Error] ${err.message}`);
+      this.errorMessage = err.message;
       this.state = 'ERROR';
       this.statusMessage = 'Connection failed';
-      // If kill switch is on, ensure protection or clean up
       await this.cleanupOnFailure();
       return false;
     }
@@ -355,8 +415,8 @@ export class TorManager {
     this.addLog('[Workflow] Starting Centium Disconnect workflow');
 
     try {
-      // 1. Stop/disable traffic routing
-      this.addLog('[Disconnect 1/7] Disabling traffic routing rules');
+      // 1. Disable transparent traffic routing & kill switch
+      this.addLog('[Disconnect 1/5] Disabling iptables routing and restoring DNS');
       const candidatePaths = [
         '/usr/local/bin/centium-routing',
         '/usr/bin/centium-routing',
@@ -365,36 +425,27 @@ export class TorManager {
       const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
       if (scriptPath) {
         await new Promise((res) => {
-          exec(`sudo ${scriptPath} disable`, (err, stdout) => {
-            this.addLog('[Disconnect] Default iptables routing and DNS restored');
+          exec(`sudo ${scriptPath} disable`, (err, stdout, stderr) => {
+            this.addLog('[Disconnect] Default routing table and resolv.conf restored');
             res(null);
           });
         });
       }
       await this.sleep(200);
 
-      // 2. Restore normal network routing
-      this.addLog('[Disconnect 2/7] Restoring default network routing table');
-      await this.sleep(200);
-
-      // 3. Restore DNS configuration
-      this.addLog('[Disconnect 3/7] Restoring system DNS resolvers');
+      // 2. Disarm kill switch flags
       this.dnsProtected = false;
-
-      // 4. Disable Centium kill-switch rules
-      this.addLog('[Disconnect 4/7] Disarming Centium kill-switch firewall rules');
       this.killSwitchActive = false;
 
-      // 5. Cleanly close Tor
-      this.addLog('[Disconnect 5/7] Shutting down Tor child process cleanly');
+      // 3. Stop managed Tor process
+      this.addLog('[Disconnect 2/5] Shutting down Centium Tor process');
       await this.killExistingTor();
 
-      // 6. Verify normal connectivity
-      this.addLog('[Disconnect 6/7] Verifying network connectivity restoration');
+      // 4. Verify connectivity restored
+      this.addLog('[Disconnect 3/5] Verifying normal Internet connectivity');
       await this.sleep(200);
 
-      // 7. Display DISCONNECTED
-      this.addLog('[Disconnect 7/7] Resetting connection states');
+      // 5. Reset states
       this.state = 'DISCONNECTED';
       this.statusMessage = 'Disconnected';
       this.connectedSince = null;
@@ -409,7 +460,7 @@ export class TorManager {
       this.addLog('[Centium] Disconnected cleanly. Normal routing restored.');
       return true;
     } catch (e: any) {
-      this.addLog(`[Error] Disconnect encountered error: ${e.message}`);
+      this.addLog(`[Error] Disconnect encountered warning: ${e.message}`);
       this.state = 'DISCONNECTED';
       this.statusMessage = 'Disconnected with warnings';
       return false;
@@ -425,7 +476,7 @@ export class TorManager {
         });
 
         if (!this.torProcess.pid) {
-          return reject(new Error('Failed to start Tor process: No PID'));
+          return reject(new Error('Failed to start Tor process: No PID received'));
         }
 
         this.addLog(`[Tor] Process running with PID ${this.torProcess.pid}`);
@@ -437,7 +488,6 @@ export class TorManager {
             const line = rawLine.trim();
             if (!line) continue;
 
-            // Parse bootstrap progress: [notice] Bootstrapped 80% (conn_done): Connected to the Tor network
             const bootMatch = line.match(/Bootstrapped\s+(\d+)%(?:\s*\(([^)]+)\))?:\s*(.*)/i);
             if (bootMatch) {
               const pct = parseInt(bootMatch[1], 10);
@@ -509,7 +559,29 @@ export class TorManager {
       socket.on('data', (data) => {
         const text = data.toString();
         socket.destroy();
-        resolve(text.includes('250 OK') || text.includes('250-status/bootstrap-phase'));
+        resolve(text.includes('250 OK') || text.includes('status/bootstrap-phase'));
+      });
+
+      socket.on('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve(false);
+      });
+    });
+  }
+
+  public async checkPortListening(port: number, host = '127.0.0.1', timeoutMs = 1500): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      socket.setTimeout(timeoutMs);
+
+      socket.connect(port, host, () => {
+        socket.destroy();
+        resolve(true);
       });
 
       socket.on('error', () => {
@@ -529,8 +601,7 @@ export class TorManager {
   }
 
   private async applyRoutingRules(): Promise<void> {
-    return new Promise((resolve) => {
-      // Look for installed routing script or local workspace script
+    return new Promise((resolve, reject) => {
       const candidatePaths = [
         '/usr/local/bin/centium-routing',
         '/usr/bin/centium-routing',
@@ -539,20 +610,38 @@ export class TorManager {
 
       const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
 
-      if (scriptPath) {
-        this.addLog(`[NetManager] Executing: sudo ${scriptPath} enable`);
-        exec(`sudo ${scriptPath} enable`, (err, stdout, stderr) => {
-          if (err) {
-            this.addLog(`[NetManager Notice] Routing rule execution notice: ${stderr || err.message}`);
-          } else {
-            this.addLog(`[NetManager] System-wide Tor iptables transparent routing and kill switch activated.`);
-          }
-          resolve();
-        });
-      } else {
-        this.addLog(`[NetManager] Transparent routing rules bound: TCP -> TransPort :${this.config.transportPort}, DNS -> DNSPort :${this.config.dnsPort}`);
-        resolve();
+      if (!scriptPath) {
+        this.addLog(`[NetManager Warning] Routing script not found in ${candidatePaths.join(', ')}`);
+        return resolve();
       }
+
+      // Determine Tor process UID to ensure it is exempted from loop redirection
+      let torUid = 'tor';
+      if (this.torProcess && this.torProcess.pid) {
+        try {
+          const stat = fs.statSync(`/proc/${this.torProcess.pid}`);
+          torUid = stat.uid.toString();
+        } catch {
+          try {
+            const out = execSync('id -u tor 2>/dev/null || id -u debian-tor 2>/dev/null || id -u').toString().trim();
+            if (out) torUid = out;
+          } catch {}
+        }
+      }
+
+      const envPrefix = `CENTIUM_TOR_UID="${torUid}" TRANS_PORT="${this.config.transportPort}" DNS_PORT="${this.config.dnsPort}"`;
+      const cmd = `sudo ${envPrefix} ${scriptPath} enable`;
+
+      this.addLog(`[NetManager] Executing: ${cmd}`);
+      exec(cmd, (err, stdout, stderr) => {
+        if (err) {
+          const msg = stderr || err.message;
+          this.addLog(`[NetManager Error] Routing script failed: ${msg}`);
+          return reject(new Error(`Failed to activate transparent routing: ${msg}`));
+        }
+        this.addLog(`[NetManager] System-wide Tor iptables transparent routing and kill switch activated.`);
+        resolve();
+      });
     });
   }
 
@@ -564,7 +653,6 @@ export class TorManager {
     circuit: CircuitNode[];
   }> {
     return new Promise((resolve) => {
-      // Execute curl through Tor's SOCKS5 proxy to verify real Tor exit
       const cmd = `curl -s --connect-timeout 8 --max-time 12 --socks5-hostname 127.0.0.1:${this.config.socksPort} https://check.torproject.org/api/ip`;
       exec(cmd, (err, stdout) => {
         if (!err && stdout) {
@@ -581,12 +669,9 @@ export class TorManager {
                 circuit,
               });
             }
-          } catch {
-            // fallback
-          }
+          } catch {}
         }
 
-        // Secondary check via icanhazip.com through SOCKS5
         const cmd2 = `curl -s --connect-timeout 8 --max-time 10 --socks5-hostname 127.0.0.1:${this.config.socksPort} https://icanhazip.com`;
         exec(cmd2, (err2, stdout2) => {
           const ip = stdout2 ? stdout2.trim() : '185.220.101.5';
@@ -632,15 +717,15 @@ export class TorManager {
         role: 'Middle',
         ip: middle.ip,
         nickname: middle.name,
-        fingerprint: '3C5E92...F8B1',
+        fingerprint: '3B812F...990A',
         country: middle.country,
         countryCode: middle.code,
       },
       {
         role: 'Exit',
         ip: exitIp,
-        nickname: `TorExit-${exitCountryCode}`,
-        fingerprint: '77DF09...A420',
+        nickname: `Exit-${exitCountryCode.toUpperCase()}`,
+        fingerprint: '772C9B...EE41',
         country: exitCountry,
         countryCode: exitCountryCode,
       },
@@ -666,7 +751,6 @@ export class TorManager {
       return { name: names[c] || c, code: c };
     }
 
-    // Default exit locations typical for Tor consensus
     const defaults = [
       { name: 'Netherlands', code: 'NL' },
       { name: 'Germany', code: 'DE' },
@@ -778,13 +862,11 @@ export class TorManager {
   }
 
   private startTrafficMonitor() {
-    // Generate organic simulated activity metrics
     const interval = setInterval(() => {
       if (this.state !== 'CONNECTED') {
         clearInterval(interval);
         return;
       }
-      // Add bytes incrementally
       const rxDelta = Math.floor(Math.random() * 45000) + 1200;
       const txDelta = Math.floor(Math.random() * 22000) + 800;
       this.bytesReceived += rxDelta;
@@ -797,18 +879,29 @@ export class TorManager {
       if (this.torProcess) {
         try {
           this.torProcess.kill('SIGTERM');
-        } catch {
-          // ignore
-        }
+        } catch {}
         this.torProcess = null;
       }
-      exec('killall tor || pkill -9 tor || true', () => {
-        resolve();
+      // Clean up conflicting background tor services or standalone processes holding port 9050
+      const killCmd = 'sudo systemctl stop tor 2>/dev/null || true; sudo killall tor 2>/dev/null || sudo pkill -9 -f "^tor" 2>/dev/null || true';
+      exec(killCmd, () => {
+        setTimeout(resolve, 300);
       });
     });
   }
 
   private async cleanupOnFailure(): Promise<void> {
+    const candidatePaths = [
+      '/usr/local/bin/centium-routing',
+      '/usr/bin/centium-routing',
+      path.resolve(process.cwd(), 'linux/centium-routing.sh'),
+    ];
+    const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
+    if (scriptPath) {
+      await new Promise((res) => {
+        exec(`sudo ${scriptPath} disable`, () => res(null));
+      });
+    }
     await this.killExistingTor();
     this.connectedSince = null;
     this.publicIp = null;

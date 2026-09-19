@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Centium VPN Core Daemon Executable
+# Runs the background Node.js service managing Tor and transparent routing
+# ==============================================================================
+
+set -e
+
+export NODE_ENV=production
+
+# Find installation directory
+CENTIUM_DIR="${CENTIUM_DIR:-/opt/centium}"
+if [ ! -d "$CENTIUM_DIR" ] || [ ! -f "$CENTIUM_DIR/dist/server.cjs" ]; then
+    # Fallback to directory of this script or workspace
+    SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+    if [ -f "$SCRIPT_DIR/dist/server.cjs" ]; then
+        CENTIUM_DIR="$SCRIPT_DIR"
+    fi
+fi
+
+if [ ! -f "$CENTIUM_DIR/dist/server.cjs" ]; then
+    echo "[!] Error: Centium build artifact $CENTIUM_DIR/dist/server.cjs not found." >&2
+    echo "    Please run 'npm run build' inside your Centium project directory." >&2
+    exit 1
+fi
+
+cd "$CENTIUM_DIR"
+exec /usr/bin/node dist/server.cjs "$@"

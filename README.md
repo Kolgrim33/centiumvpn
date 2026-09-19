@@ -2,127 +2,70 @@
 
 Centium VPN is a privacy-focused desktop VPN application that routes system Internet traffic through the **Tor network**.
 
-## How Centium Works
+## 1. Running Centium as a Native Desktop App (Not Just in a Browser)
 
-Unlike conventional VPN providers that operate centralized VPN servers (where the provider can view, decrypt, or log your browsing traffic), Centium uses a **zero-backend routing architecture**:
+Centium is designed to run as a **native desktop application window**. 
 
-```
-Your Applications (Browser, Shell, Clients)
-       ↓
-Centium Virtual Interface (centium0)
-       ↓
-Centium Network Daemon (TransPort :9040, DNSPort :5353)
-       ↓
-Local Tor Process
-       ↓
-Tor Guard Relay (Layer 1 encryption)
-       ↓
-Tor Middle Relay (Layer 2 encryption)
-       ↓
-Tor Exit Relay (Layer 3 decryption)
-       ↓
-Destination Internet
-```
+Once installed, you do not need to open a browser tab. You can launch Centium directly:
 
-Centium backend servers are **never** in your traffic path.
-
----
-
-## Live Web Preview vs. Native Desktop System VPN
-
-1. **In the Web Sandbox Preview**:
-   - The **real Tor binary (v0.4.9.11)** is compiled and running inside the Linux container.
-   - SOCKS5 proxy on `127.0.0.1:9050`, DNSPort on `127.0.0.1:5353`, and TransPort on `127.0.0.1:9040` are active.
-   - Live onion circuits are formed and verified against `check.torproject.org`.
-   - However, because the preview runs inside a remote Cloud Run sandboxed container (gVisor), the remote container cannot modify the network interface of your physical local computer.
-
-2. **On Your Physical Linux Machine (Arch, Ubuntu, Debian, Fedora)**:
-   - Centium runs locally as a native application.
-   - The privileged daemon (`centiumd`) creates the virtual interface (`centium0`), configures `iptables`/`nftables` to transparently route all system TCP traffic through Tor, sets DNS to Tor DNSPort (`5353`), and arms the fail-closed kill switch.
-
----
-
-## Quick Start on Your Linux Desktop
-
-### 1. Clone or Download the Repository
 ```bash
-git clone <repository-url> centium
+# Launch as a standalone desktop application window
+centium
+# or
+./centium-desktop.sh
+# or
+npm run desktop
+```
+
+This opens Centium in a dedicated, distraction-free desktop window with the Centium application icon, system tray menu, and native window controls.
+
+---
+
+## 2. How System-Wide VPN Routing Actually Works on Arch Linux
+
+In the codebase:
+- **`server/torManager.ts`**: Controls the local Tor process (`/usr/bin/tor`), manages ControlPort `9051`, generates the hardened `torrc` (enabling `TransPort 9040` and `DNSPort 5353`), monitors 100% bootstrap progress, and invokes the routing manager.
+- **`linux/centium-routing.sh`**: The privileged firewall and routing engine. When you click **Connect**, it executes:
+  1. Sets `/etc/resolv.conf` to `nameserver 127.0.0.1` so system DNS queries route to Tor DNSPort (`5353`).
+  2. Creates the `CENTIUM_NAT` iptables chain: redirects outbound TCP SYN packets to Tor TransPort (`9040`).
+  3. Bypasses the local `tor` user process (auto-detected as user `tor` on Arch Linux and `debian-tor` on Debian/Ubuntu) so Tor itself can communicate with outside relays.
+  4. Enforces the **Kill Switch** (`CENTIUM_FILTER` chain): drops any outbound packets that attempt to bypass Tor.
+  5. Drops IPv6 traffic to prevent dual-stack IPv6 leaks.
+
+When you click **Disconnect**:
+- Restores original `/etc/resolv.conf`.
+- Flushes `CENTIUM_NAT` and `CENTIUM_FILTER` iptables chains.
+- Restores default network routing.
+
+---
+
+## 3. Installation on Arch Linux
+
+```bash
 cd centium
-```
 
-### 2. Run the Automated Installer
-```bash
+# 1. Run the native Linux installer (installs dependencies, routing script, sudoers, and desktop launcher)
 sudo ./setup-linux.sh
-```
 
-### 3. Launch Centium
-```bash
-# Start the Centium service
-sudo systemctl start centiumd
-
-# Start the application
-npm start
-```
-
-Or run directly in development mode:
-```bash
-sudo npm run dev
+# 2. Launch Centium Desktop
+centium
 ```
 
 ---
 
-## Manual Installation by Distribution
+## 4. Manual Verification in Terminal
 
-### Arch Linux
+While Centium is **Connected**, verify in another terminal:
+
 ```bash
-cd linux/arch
-makepkg -si
-sudo systemctl enable --now centiumd
+# Verify your IP is an encrypted Tor Exit Relay
+curl https://check.torproject.org/api/ip
+
+# Verify active iptables transparent routing rules
+sudo centium-routing status
 ```
 
-### Ubuntu / Debian
+To manually reset your network at any time:
 ```bash
-# 1. Install dependencies
-sudo apt-get update
-sudo apt-get install -y tor iptables iproute2 nodejs npm
-
-# 2. Setup routing script and service
-sudo cp linux/centium-routing.sh /usr/local/bin/centium-routing
-sudo chmod +x /usr/local/bin/centium-routing
-sudo cp linux/centiumd.service /etc/systemd/system/centiumd.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now centiumd
-
-# 3. Build and launch UI
-npm install
-npm run build
-npm start
+sudo centium-routing disable
 ```
-
----
-
-## Transparent Routing & Kill Switch Commands
-
-You can also test the transparent routing rules independently:
-
-- **Enable Tor system-wide routing + Kill Switch**:
-  ```bash
-  sudo /usr/local/bin/centium-routing enable
-  ```
-- **Check routing & filter status**:
-  ```bash
-  sudo /usr/local/bin/centium-routing status
-  ```
-- **Disable routing and restore normal network defaults**:
-  ```bash
-  sudo /usr/local/bin/centium-routing disable
-  ```
-
----
-
-## Core Privacy Features
-- **Fail-Closed Kill Switch**: If the Tor process crashes or circuit drops, `iptables` blocks all non-Tor outbound traffic to prevent IP leaks.
-- **DNS Leak Protection**: System DNS is locked to `127.0.0.1:5353` (Tor DNSPort) so lookups never leak to your ISP.
-- **IPv6 Shield**: Blocks un-tunneled IPv6 packets to prevent dual-stack IP bypass.
-- **Pluggable Bridges**: Supports `obfs4` and `snowflake` for users in censored networks.
-- **Exit Jurisdiction**: Set preferred exit relay countries via Tor's `ExitNodes` directive.

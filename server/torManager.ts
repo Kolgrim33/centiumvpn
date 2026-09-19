@@ -780,49 +780,94 @@ export class TorManager {
     this.addLog(`[NetManager] Virtual interface ${this.config.virtualInterface} configured (tun / SOCKS5 transparent bridge)`);
   }
 
-  private async applyRoutingRules(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const candidatePaths = [
-        '/usr/local/bin/centium-routing',
-        '/usr/bin/centium-routing',
-        path.resolve(process.cwd(), 'linux/centium-routing.sh'),
-      ];
-
-      const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
-
-      if (!scriptPath) {
-        this.addLog(`[NetManager Warning] Routing script not found in ${candidatePaths.join(', ')}`);
-        return resolve();
-      }
-
-      // Determine Tor process UID to ensure it is exempted from loop redirection
-      let torUid = 'tor';
-      if (this.torProcess && this.torProcess.pid) {
-        try {
-          const stat = fs.statSync(`/proc/${this.torProcess.pid}`);
-          torUid = stat.uid.toString();
-        } catch {
-          try {
-            const out = execSync('id -u tor 2>/dev/null || id -u debian-tor 2>/dev/null || id -u').toString().trim();
-            if (out) torUid = out;
-          } catch {}
+  public async verifyIptablesChainsHooked(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const pathEnv = 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"';
+      const natCmd = `sudo env ${pathEnv} iptables -w -t nat -C OUTPUT -j CENTIUM_NAT`;
+      exec(natCmd, (natErr) => {
+        if (natErr) {
+          this.addLog(`[NetManager Audit] CENTIUM_NAT hook check failed: ${natErr.message}`);
+          return resolve(false);
         }
+
+        const filterCmd = `sudo env ${pathEnv} iptables -w -t filter -C OUTPUT -j CENTIUM_FILTER`;
+        exec(filterCmd, (filterErr) => {
+          if (filterErr) {
+            this.addLog(`[NetManager Audit] CENTIUM_FILTER hook check failed: ${filterErr.message}`);
+            return resolve(false);
+          }
+
+          resolve(true);
+        });
+      });
+    });
+  }
+
+  private async applyRoutingRules(): Promise<void> {
+    const candidatePaths = [
+      '/usr/local/bin/centium-routing',
+      '/usr/bin/centium-routing',
+      path.resolve(process.cwd(), 'linux/centium-routing.sh'),
+    ];
+
+    const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
+
+    if (!scriptPath) {
+      this.addLog(`[NetManager Warning] Routing script not found in ${candidatePaths.join(', ')}`);
+      return;
+    }
+
+    // Determine Tor process UID to ensure it is exempted from loop redirection
+    let torUid = 'tor';
+    if (this.torProcess && this.torProcess.pid) {
+      try {
+        const stat = fs.statSync(`/proc/${this.torProcess.pid}`);
+        torUid = stat.uid.toString();
+      } catch {
+        try {
+          const out = execSync('id -u tor 2>/dev/null || id -u debian-tor 2>/dev/null || id -u').toString().trim();
+          if (out) torUid = out;
+        } catch {}
       }
+    }
 
-      const envPrefix = `CENTIUM_TOR_UID="${torUid}" TRANS_PORT="${this.config.transportPort}" DNS_PORT="${this.config.dnsPort}"`;
-      const cmd = `sudo ${envPrefix} ${scriptPath} enable`;
+    const envPrefix = `CENTIUM_TOR_UID="${torUid}" TRANS_PORT="${this.config.transportPort}" DNS_PORT="${this.config.dnsPort}"`;
+    const cmd = `sudo ${envPrefix} "${scriptPath}" enable`;
 
-      this.addLog(`[NetManager] Executing: ${cmd}`);
+    this.addLog(`[NetManager] Executing: ${cmd}`);
+
+    await new Promise<void>((resolve, reject) => {
       exec(cmd, (err, stdout, stderr) => {
         if (err) {
           const msg = stderr || err.message;
           this.addLog(`[NetManager Error] Routing script failed: ${msg}`);
           return reject(new Error(`Failed to activate transparent routing: ${msg}`));
         }
-        this.addLog(`[NetManager] System-wide Tor iptables transparent routing and kill switch activated.`);
+        if (stdout) {
+          stdout
+            .trim()
+            .split('\n')
+            .forEach((l) => this.addLog(`[Routing Script] ${l}`));
+        }
         resolve();
       });
     });
+
+    // Independent post-condition audit from Node: do not trust script exit code alone
+    this.addLog('[NetManager] Running independent Node verification of iptables chains (CENTIUM_NAT, CENTIUM_FILTER)...');
+    const chainsHooked = await this.verifyIptablesChainsHooked();
+    if (!chainsHooked) {
+      this.addLog('[NetManager Error] Independent audit failed: CENTIUM_NAT or CENTIUM_FILTER is missing from OUTPUT!');
+      // Rollback to clean state
+      try {
+        await new Promise((res) => exec(`sudo "${scriptPath}" disable`, () => res(null)));
+      } catch {}
+      throw new Error(
+        'Routing verification failed: iptables chains (CENTIUM_NAT / CENTIUM_FILTER) were not installed or hooked into OUTPUT.'
+      );
+    }
+
+    this.addLog('[NetManager] ✓ Independent audit passed: CENTIUM_NAT and CENTIUM_FILTER verified active in kernel iptables.');
   }
 
   public async verifyTorExitTraffic(): Promise<{

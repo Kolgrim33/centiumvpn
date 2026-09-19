@@ -6,6 +6,27 @@
 
 set -euo pipefail
 
+# Ensure standard system admin paths are in PATH (needed for non-interactive sudo)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
+find_executable() {
+    local name="$1"
+    if command -v "$name" &>/dev/null; then
+        command -v "$name"
+        return 0
+    fi
+    for dir in /sbin /usr/sbin /usr/bin /bin /usr/local/sbin /usr/local/bin; do
+        if [ -x "$dir/$name" ]; then
+            echo "$dir/$name"
+            return 0
+        fi
+    done
+    return 1
+}
+
+IPTABLES="$(find_executable iptables || true)"
+IP6TABLES="$(find_executable ip6tables || true)"
+
 # 1. Determine Tor user / UID
 if [ -n "${CENTIUM_TOR_UID:-}" ]; then
     TOR_UID="$CENTIUM_TOR_UID"
@@ -44,7 +65,14 @@ enable_routing() {
         exit 1
     fi
 
-    echo "[Centium] Enabling system-wide routing via Tor (Tor identity: $TOR_UID)..."
+    # Explicitly verify iptables binary presence - failure must NEVER be a silent no-op
+    if [ -z "$IPTABLES" ]; then
+        echo "[Centium Error] iptables executable not found in PATH or standard directories (/sbin, /usr/sbin, /usr/bin, /bin)!" >&2
+        echo "[Centium Error] iptables is strictly required for transparent routing and kill switch protection. Aborting." >&2
+        exit 1
+    fi
+
+    echo "[Centium] Enabling system-wide routing via Tor (Tor identity: $TOR_UID, iptables: $IPTABLES)..."
 
     # Backup resolv.conf
     mkdir -p /run/centium
@@ -52,49 +80,65 @@ enable_routing() {
         cp /etc/resolv.conf "$RESOLV_BACKUP" 2>/dev/null || true
     fi
 
-    # Point system DNS to local Tor resolver
-    echo "nameserver 127.0.0.1" > /etc/resolv.conf 2>/dev/null || true
-
-    # Block IPv6 leak vectors
-    if command -v ip6tables &>/dev/null; then
-        ip6tables -P INPUT DROP 2>/dev/null || true
-        ip6tables -P OUTPUT DROP 2>/dev/null || true
-        ip6tables -P FORWARD DROP 2>/dev/null || true
-        ip6tables -F 2>/dev/null || true
-        ip6tables -A OUTPUT -o lo -j ACCEPT 2>/dev/null || true
+    # Block IPv6 leak vectors (with -w flag)
+    if [ -n "$IP6TABLES" ]; then
+        $IP6TABLES -w -P INPUT DROP 2>/dev/null || true
+        $IP6TABLES -w -P OUTPUT DROP 2>/dev/null || true
+        $IP6TABLES -w -P FORWARD DROP 2>/dev/null || true
+        $IP6TABLES -w -F 2>/dev/null || true
+        $IP6TABLES -w -A OUTPUT -o lo -j ACCEPT 2>/dev/null || true
     fi
 
-    # Transparent TCP & DNS redirection via iptables NAT
-    if command -v iptables &>/dev/null; then
-        iptables -t nat -N CENTIUM_NAT 2>/dev/null || iptables -t nat -F CENTIUM_NAT
+    # Transparent TCP & DNS redirection via iptables NAT (with -w flag)
+    $IPTABLES -w -t nat -N CENTIUM_NAT 2>/dev/null || $IPTABLES -w -t nat -F CENTIUM_NAT
 
-        # DNS redirection to Tor DNSPort (5353)
-        iptables -t nat -A CENTIUM_NAT -p udp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
-        iptables -t nat -A CENTIUM_NAT -p tcp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+    # DNS redirection to Tor DNSPort (5353)
+    $IPTABLES -w -t nat -A CENTIUM_NAT -p udp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
+    $IPTABLES -w -t nat -A CENTIUM_NAT -p tcp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
 
-        # Bypass Tor daemon process to prevent circular routing
-        iptables -t nat -A CENTIUM_NAT -m owner --uid-owner "$TOR_UID" -j RETURN 2>/dev/null || true
+    # Bypass Tor daemon process to prevent circular routing
+    $IPTABLES -w -t nat -A CENTIUM_NAT -m owner --uid-owner "$TOR_UID" -j RETURN 2>/dev/null || true
 
-        # Bypass loopback
-        iptables -t nat -A CENTIUM_NAT -d 127.0.0.0/8 -j RETURN
+    # Bypass loopback
+    $IPTABLES -w -t nat -A CENTIUM_NAT -d 127.0.0.0/8 -j RETURN
 
-        # Redirect all outbound TCP SYN packets to Tor TransPort (9040)
-        iptables -t nat -A CENTIUM_NAT -p tcp --syn -j REDIRECT --to-ports "$TRANS_PORT"
+    # Redirect all outbound TCP SYN packets to Tor TransPort (9040)
+    $IPTABLES -w -t nat -A CENTIUM_NAT -p tcp --syn -j REDIRECT --to-ports "$TRANS_PORT"
 
-        # Apply NAT chain to OUTPUT
-        iptables -t nat -D OUTPUT -j CENTIUM_NAT 2>/dev/null || true
-        iptables -t nat -A OUTPUT -j CENTIUM_NAT
+    # Apply NAT chain to OUTPUT
+    $IPTABLES -w -t nat -D OUTPUT -j CENTIUM_NAT 2>/dev/null || true
+    $IPTABLES -w -t nat -A OUTPUT -j CENTIUM_NAT
 
-        # Fail-closed Kill Switch filter
-        iptables -t filter -N CENTIUM_FILTER 2>/dev/null || iptables -t filter -F CENTIUM_FILTER
-        iptables -t filter -A CENTIUM_FILTER -o lo -j ACCEPT
-        iptables -t filter -A CENTIUM_FILTER -m owner --uid-owner "$TOR_UID" -j ACCEPT 2>/dev/null || true
-        iptables -t filter -A CENTIUM_FILTER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
-            iptables -t filter -A CENTIUM_FILTER -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
-        iptables -t filter -A CENTIUM_FILTER -j DROP
+    # Fail-closed Kill Switch filter
+    $IPTABLES -w -t filter -N CENTIUM_FILTER 2>/dev/null || $IPTABLES -w -t filter -F CENTIUM_FILTER
+    $IPTABLES -w -t filter -A CENTIUM_FILTER -o lo -j ACCEPT
+    $IPTABLES -w -t filter -A CENTIUM_FILTER -m owner --uid-owner "$TOR_UID" -j ACCEPT 2>/dev/null || true
+    $IPTABLES -w -t filter -A CENTIUM_FILTER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+        $IPTABLES -w -t filter -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+    $IPTABLES -w -t filter -A CENTIUM_FILTER -j DROP
 
-        iptables -t filter -D OUTPUT -j CENTIUM_FILTER 2>/dev/null || true
-        iptables -t filter -A OUTPUT -j CENTIUM_FILTER
+    $IPTABLES -w -t filter -D OUTPUT -j CENTIUM_FILTER 2>/dev/null || true
+    $IPTABLES -w -t filter -A OUTPUT -j CENTIUM_FILTER
+
+    # Point system DNS to local Tor resolver now that NAT redirection to DNS_PORT is active
+    echo "nameserver 127.0.0.1" > /etc/resolv.conf 2>/dev/null || true
+
+    # Post-condition verification: check that CENTIUM_NAT and CENTIUM_FILTER exist and are hooked into OUTPUT
+    echo "[Centium] Performing post-routing iptables rule audit..."
+    local audit_failed=0
+    if ! $IPTABLES -w -t nat -C OUTPUT -j CENTIUM_NAT 2>/dev/null; then
+        echo "[Centium Error] Post-condition audit failed: CENTIUM_NAT is not active in nat OUTPUT!" >&2
+        audit_failed=1
+    fi
+    if ! $IPTABLES -w -t filter -C OUTPUT -j CENTIUM_FILTER 2>/dev/null; then
+        echo "[Centium Error] Post-condition audit failed: CENTIUM_FILTER is not active in filter OUTPUT!" >&2
+        audit_failed=1
+    fi
+
+    if [ "$audit_failed" -ne 0 ]; then
+        echo "[Centium Error] Routing verification failed. Reverting all changes to prevent dead network..." >&2
+        disable_routing
+        exit 1
     fi
 
     echo "[Centium] System-wide Tor transparent routing and kill switch activated."
@@ -103,21 +147,21 @@ enable_routing() {
 disable_routing() {
     echo "[Centium] Restoring network defaults..."
 
-    if command -v iptables &>/dev/null; then
-        iptables -t nat -D OUTPUT -j CENTIUM_NAT 2>/dev/null || true
-        iptables -t nat -F CENTIUM_NAT 2>/dev/null || true
-        iptables -t nat -X CENTIUM_NAT 2>/dev/null || true
+    if [ -n "$IPTABLES" ]; then
+        $IPTABLES -w -t nat -D OUTPUT -j CENTIUM_NAT 2>/dev/null || true
+        $IPTABLES -w -t nat -F CENTIUM_NAT 2>/dev/null || true
+        $IPTABLES -w -t nat -X CENTIUM_NAT 2>/dev/null || true
 
-        iptables -t filter -D OUTPUT -j CENTIUM_FILTER 2>/dev/null || true
-        iptables -t filter -F CENTIUM_FILTER 2>/dev/null || true
-        iptables -t filter -X CENTIUM_FILTER 2>/dev/null || true
+        $IPTABLES -w -t filter -D OUTPUT -j CENTIUM_FILTER 2>/dev/null || true
+        $IPTABLES -w -t filter -F CENTIUM_FILTER 2>/dev/null || true
+        $IPTABLES -w -t filter -X CENTIUM_FILTER 2>/dev/null || true
     fi
 
-    if command -v ip6tables &>/dev/null; then
-        ip6tables -P INPUT ACCEPT 2>/dev/null || true
-        ip6tables -P OUTPUT ACCEPT 2>/dev/null || true
-        ip6tables -P FORWARD ACCEPT 2>/dev/null || true
-        ip6tables -F 2>/dev/null || true
+    if [ -n "$IP6TABLES" ]; then
+        $IP6TABLES -w -P INPUT ACCEPT 2>/dev/null || true
+        $IP6TABLES -w -P OUTPUT ACCEPT 2>/dev/null || true
+        $IP6TABLES -w -P FORWARD ACCEPT 2>/dev/null || true
+        $IP6TABLES -w -F 2>/dev/null || true
     fi
 
     if [ -f "$RESOLV_BACKUP" ]; then
@@ -130,11 +174,15 @@ disable_routing() {
 
 status_routing() {
     echo "=== Centium NAT Rules ==="
-    iptables -t nat -L CENTIUM_NAT -v -n 2>/dev/null || echo "No CENTIUM_NAT chain active"
-    echo ""
-    echo "=== Centium Kill Switch Rules ==="
-    iptables -t filter -L CENTIUM_FILTER -v -n 2>/dev/null || echo "No CENTIUM_FILTER chain active"
-    echo ""
+    if [ -n "$IPTABLES" ]; then
+        $IPTABLES -w -t nat -L CENTIUM_NAT -v -n 2>/dev/null || echo "No CENTIUM_NAT chain active"
+        echo ""
+        echo "=== Centium Kill Switch Rules ==="
+        $IPTABLES -w -t filter -L CENTIUM_FILTER -v -n 2>/dev/null || echo "No CENTIUM_FILTER chain active"
+        echo ""
+    else
+        echo "iptables not found"
+    fi
     echo "=== Active Tor Ports ==="
     if command -v ss &>/dev/null; then
         ss -lntup | grep -E "${TRANS_PORT}|${DNS_PORT}|9050" || echo "No Tor ports found listening"

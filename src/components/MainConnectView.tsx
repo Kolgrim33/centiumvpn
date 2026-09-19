@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, ShieldX, RefreshCw, Globe, Clock, ArrowRight, AlertTriangle, Terminal, ExternalLink } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Check, RefreshCw, Globe, Copy, ExternalLink, Terminal } from 'lucide-react';
+import { CentiumLogo } from './CentiumLogo.tsx';
 import { CentiumStatus, CentiumConfig } from '../types.ts';
 
 interface MainConnectViewProps {
@@ -23,40 +24,42 @@ export const MainConnectView: React.FC<MainConnectViewProps> = ({
 }) => {
   const [uptimeStr, setUptimeStr] = useState('00:00:00');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [copiedIp, setCopiedIp] = useState(false);
 
-  // Connection timer update
   useEffect(() => {
     if (!status.connectedSince || status.state !== 'CONNECTED') {
       setUptimeStr('00:00:00');
       return;
     }
-
     const updateTimer = () => {
-      const now = Date.now();
-      const diffSec = Math.max(0, Math.floor((now - status.connectedSince!) / 1000));
-      const hours = Math.floor(diffSec / 3600).toString().padStart(2, '0');
-      const mins = Math.floor((diffSec % 3600) / 60).toString().padStart(2, '0');
-      const secs = (diffSec % 60).toString().padStart(2, '0');
-      setUptimeStr(`${hours}:${mins}:${secs}`);
+      const elapsed = Math.max(0, Math.floor((Date.now() - status.connectedSince!) / 1000));
+      const hours = Math.floor(elapsed / 3600).toString().padStart(2, '0');
+      const minutes = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
+      const seconds = (elapsed % 60).toString().padStart(2, '0');
+      setUptimeStr(`${hours}:${minutes}:${seconds}`);
     };
-
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
   }, [status.connectedSince, status.state]);
 
-  const isTransitioning =
-    status.state === 'STARTING' ||
-    status.state === 'CONNECTING' ||
-    status.state === 'DISCONNECTING' ||
-    status.state === 'RECONNECTING';
-
   const isConnected = status.state === 'CONNECTED';
+  const isConnecting = status.state === 'CONNECTING' || status.state === 'STARTING';
+  const isDisconnecting = status.state === 'DISCONNECTING';
+  const isError = status.state === 'ERROR';
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await onRefreshCircuit();
     setIsRefreshing(false);
+  };
+
+  const handleCopyIp = () => {
+    if (status.publicIp) {
+      navigator.clipboard.writeText(status.publicIp);
+      setCopiedIp(true);
+      setTimeout(() => setCopiedIp(false), 2000);
+    }
   };
 
   const getExitCountryLabel = () => {
@@ -70,224 +73,252 @@ export const MainConnectView: React.FC<MainConnectViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-md mx-auto py-8 px-4 flex flex-col items-center">
-      {/* Visual Status Indicator Node */}
-      <div className="relative my-8 flex items-center justify-center">
-        {/* Outer ambient glow */}
-        <div
-          className={`absolute w-32 h-32 rounded-full transition-all duration-700 pointer-events-none ${
-            isConnected
-              ? 'bg-emerald-500/10 blur-xl scale-110'
-              : isTransitioning
-              ? 'bg-amber-500/15 blur-xl animate-pulse'
-              : status.state === 'ERROR'
-              ? 'bg-rose-500/15 blur-xl'
-              : 'bg-zinc-800/20 blur-md'
-          }`}
-        />
+    <div className="w-full max-w-lg mx-auto py-6 px-4 flex flex-col items-center">
+      {/* Centium Emblem Logo */}
+      <div className="mb-5 flex flex-col items-center">
+        <div className="p-4 rounded-2xl bg-[#121018] border border-[#1B1824] mb-3">
+          <CentiumLogo
+            size={72}
+            color={isConnected ? '#6C4DFF' : isConnecting ? '#6C4DFF' : isError ? '#EF4444' : '#555064'}
+            animated={true}
+          />
+        </div>
 
-        {/* Outer Ring */}
-        <div
-          className={`w-28 h-28 rounded-full border flex items-center justify-center transition-all duration-500 ${
-            isConnected
-              ? 'border-emerald-500/30 bg-emerald-950/20'
-              : isTransitioning
-              ? 'border-amber-500/40 bg-amber-950/20 animate-spin-slow'
-              : status.state === 'ERROR'
-              ? 'border-rose-500/40 bg-rose-950/20'
-              : 'border-zinc-800 bg-zinc-900/40'
-          }`}
-        >
-          {/* Inner core circle */}
-          <div
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
-              isConnected
-                ? 'bg-emerald-400 text-zinc-950 shadow-[0_0_20px_rgba(52,211,153,0.5)]'
-                : isTransitioning
-                ? 'bg-amber-400 text-zinc-950 animate-pulse'
-                : status.state === 'ERROR'
-                ? 'bg-rose-500 text-zinc-100'
-                : 'bg-zinc-700 text-zinc-400'
-            }`}
-          >
-            {isConnected ? (
-              <ShieldCheck className="w-6 h-6" />
-            ) : status.state === 'ERROR' ? (
-              <ShieldAlert className="w-6 h-6" />
-            ) : (
-              <ShieldX className="w-6 h-6" />
-            )}
+        {/* Brand & Connection State Headline (Section 7, 8, 9) */}
+        <div className="text-center">
+          <h1 className="text-lg font-bold text-[#F4F3F7] tracking-tight">
+            Centium
+          </h1>
+          <div className="mt-1 flex items-center justify-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isConnected
+                  ? 'bg-emerald-400'
+                  : isConnecting
+                  ? 'bg-[#6C4DFF] animate-pulse'
+                  : isError
+                  ? 'bg-rose-500'
+                  : 'bg-[#555064]'
+              }`}
+            />
+            <span
+              className={`text-sm font-medium ${
+                isConnected
+                  ? 'text-emerald-400'
+                  : isConnecting
+                  ? 'text-[#6C4DFF]'
+                  : isError
+                  ? 'text-rose-400'
+                  : 'text-[#8E899E]'
+              }`}
+            >
+              {isConnected
+                ? 'Connected'
+                : isConnecting
+                ? 'Connecting to Tor'
+                : isDisconnecting
+                ? 'Disconnecting'
+                : isError
+                ? 'Connection error'
+                : 'Not connected'}
+            </span>
           </div>
+
+          <p className="mt-1.5 text-xs text-[#8E899E] max-w-xs mx-auto">
+            {isConnected
+              ? 'Tor connection active. System traffic is routed through encrypted onion relays.'
+              : isConnecting
+              ? status.statusMessage || 'Establishing encrypted circuit with Tor directory authorities...'
+              : 'Your traffic is not currently routed through Tor.'}
+          </p>
         </div>
       </div>
 
-      {/* State Headline & Subtitle */}
-      <div className="text-center space-y-1 mb-8">
-        <h2
-          className={`text-2xl font-bold tracking-wider uppercase font-mono ${
-            isConnected
-              ? 'text-emerald-400'
-              : isTransitioning
-              ? 'text-amber-400'
-              : status.state === 'ERROR'
-              ? 'text-rose-400'
-              : 'text-zinc-200'
-          }`}
-        >
-          {status.state}
-        </h2>
-        <p className="text-sm text-zinc-400 font-normal">
-          {isConnected && 'Protected by Tor'}
-          {status.state === 'DISCONNECTED' && 'Your connection is not protected'}
-          {status.state === 'STARTING' && 'Starting Tor...'}
-          {status.state === 'CONNECTING' &&
-            (status.bootstrapPercent > 0
-              ? `Building secure circuit... (${status.bootstrapPercent}%)`
-              : 'Building secure circuit...')}
-          {status.state === 'DISCONNECTING' && 'Disconnecting and restoring routing...'}
-          {status.state === 'RECONNECTING' && 'Reconnecting to Tor network...'}
-          {status.state === 'ERROR' && (status.errorMessage || 'Connection failed')}
-        </p>
+      {/* Primary Connect / Disconnect Action Button (Section 11) */}
+      <div className="w-full max-w-sm mb-6">
+        {!isConnected ? (
+          <button
+            id="btn-main-connect"
+            onClick={onConnect}
+            disabled={isConnecting || isDisconnecting}
+            className="w-full h-12 rounded-xl bg-[#6C4DFF] hover:bg-[#5B3EE0] active:bg-[#5146D8] text-[#F4F3F7] font-semibold text-sm tracking-wide transition-all shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isConnecting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-[#F4F3F7]" />
+                <span>Connecting…</span>
+              </>
+            ) : (
+              <span>Connect</span>
+            )}
+          </button>
+        ) : (
+          <button
+            id="btn-main-disconnect"
+            onClick={onDisconnect}
+            disabled={isDisconnecting}
+            className="w-full h-12 rounded-xl bg-[#17141E] hover:bg-[#201C2B] text-[#F4F3F7] border border-[#23202E] font-semibold text-sm tracking-wide transition-colors cursor-pointer flex items-center justify-center gap-2"
+          >
+            {isDisconnecting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-[#8E899E]" />
+                <span>Disconnecting…</span>
+              </>
+            ) : (
+              <span>Disconnect</span>
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Connection Progress Detail (During Transition) */}
-      {isTransitioning && (
-        <div className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3.5 mb-6 space-y-2">
-          <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span className="font-mono">Step {status.currentStep} of {status.totalSteps}</span>
-            <span className="font-medium text-amber-400 font-mono">{status.bootstrapPercent}%</span>
+      {/* Progress & Bootstrap Details (when connecting) */}
+      {isConnecting && (
+        <div className="w-full max-w-sm mb-6 p-3.5 rounded-xl bg-[#121018] border border-[#1B1824] space-y-2 text-xs">
+          <div className="flex items-center justify-between text-[#8E899E]">
+            <span>Tor Network Bootstrap</span>
+            <span className="font-mono text-[#F4F3F7] font-semibold">
+              {status.bootstrapPercent}%
+            </span>
           </div>
-          {/* Progress bar */}
-          <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+          {/* Restrained progress bar */}
+          <div className="w-full h-1.5 bg-[#17141E] rounded-full overflow-hidden">
             <div
-              className="bg-amber-400 h-full rounded-full transition-all duration-300"
+              className="h-full bg-[#6C4DFF] transition-all duration-300 rounded-full"
               style={{ width: `${Math.max(5, status.bootstrapPercent)}%` }}
             />
           </div>
-          <p className="text-xs text-zinc-300 font-mono truncate">
-            {status.stepDescription || 'Negotiating Tor rendezvous...'}
-          </p>
-        </div>
-      )}
-
-      {/* Error Alert Box */}
-      {status.state === 'ERROR' && (
-        <div className="w-full bg-rose-950/40 border border-rose-900/60 rounded-lg p-3.5 mb-6 text-xs text-rose-300 flex items-start gap-2.5">
-          <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-          <div className="space-y-1">
-            <div className="font-semibold text-rose-200">Connection Failed</div>
-            <div>{status.errorMessage || 'Unable to establish onion circuit.'}</div>
-            <div className="text-[11px] text-rose-400/80 pt-1">
-              Kill switch prevented unprotected traffic leakage.
-            </div>
+          <div className="text-[11px] text-[#8E899E] truncate">
+            {status.stepDescription || 'Building 3-hop onion circuit...'}
           </div>
         </div>
       )}
 
-      {/* Big Action Button: [ CONNECT ] or [ DISCONNECT ] */}
-      <div className="w-full mb-8">
-        {isConnected ? (
-          <button
-            id="btn-disconnect"
-            onClick={onDisconnect}
-            disabled={isTransitioning}
-            className="w-full py-3.5 px-6 rounded-lg text-sm font-semibold tracking-wider uppercase font-mono bg-zinc-800 hover:bg-rose-950/60 hover:text-rose-300 text-zinc-200 border border-zinc-700 hover:border-rose-700 transition-all duration-200 cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {isTransitioning ? 'Disconnecting...' : 'DISCONNECT'}
-          </button>
-        ) : (
-          <button
-            id="btn-connect"
-            onClick={onConnect}
-            disabled={isTransitioning}
-            className="w-full py-3.5 px-6 rounded-lg text-sm font-semibold tracking-wider uppercase font-mono bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold transition-all duration-200 cursor-pointer shadow-md hover:shadow-emerald-500/20 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {isTransitioning ? 'Connecting...' : 'CONNECT'}
-          </button>
-        )}
-      </div>
-
-      {/* Information Cards (Section 4 layout) */}
-      <div className="w-full bg-zinc-900/90 border border-zinc-800/90 rounded-xl p-4 divide-y divide-zinc-800/60 text-xs">
-        {/* Row 1: Exit location */}
-        <div className="pb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-zinc-400">
-            <Globe className="w-4 h-4 text-zinc-500" />
-            <span>Exit location</span>
-          </div>
-          <button
-            id="btn-change-exit"
-            onClick={onNavigateToExit}
-            className="flex items-center gap-1.5 font-medium text-zinc-200 hover:text-emerald-400 transition-colors cursor-pointer group"
-          >
-            <span>{getExitCountryLabel()}</span>
-            <ArrowRight className="w-3 h-3 text-zinc-500 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-        </div>
-
-        {/* Row 2: Status / Connection Duration */}
-        {isConnected ? (
-          <div className="py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-zinc-400">
-              <Clock className="w-4 h-4 text-zinc-500" />
-              <span>Connection</span>
-            </div>
-            <div className="font-mono text-zinc-200 font-medium">{uptimeStr}</div>
-          </div>
-        ) : (
-          <div className="py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-zinc-400">
-              <ShieldCheck className="w-4 h-4 text-zinc-500" />
-              <span>Tor Network</span>
-            </div>
-            <div className="font-mono text-zinc-300 font-medium">Ready</div>
-          </div>
-        )}
-
-        {/* Row 3: Public IP and Circuit Refresh (when connected) */}
-        {isConnected && (
-          <div className="pt-3 flex items-center justify-between">
-            <div className="space-y-0.5">
-              <div className="text-zinc-500 text-[11px]">Tor Exit IP</div>
-              <div className="font-mono text-zinc-200 text-xs font-semibold">
-                {status.publicIp || 'Protected Relay'}
-              </div>
+      {/* Active Session & Exit Relay Card (when connected) */}
+      {isConnected && (
+        <div className="w-full max-w-sm mb-6 p-4 rounded-xl bg-[#121018] border border-[#1B1824] space-y-3 text-xs">
+          <div className="flex items-center justify-between pb-2.5 border-b border-[#1B1824]">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-[#6C4DFF]" />
+              <span className="text-[#8E899E]">Exit location</span>
             </div>
             <button
-              id="btn-refresh-circuit"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              title="Request New Tor Circuit (SIGNAL NEWNYM)"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] font-mono transition-colors disabled:opacity-50 cursor-pointer"
+              onClick={onNavigateToExit}
+              className="font-medium text-[#F4F3F7] hover:text-[#6C4DFF] flex items-center gap-1 transition-colors cursor-pointer"
             >
-              <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>New Circuit</span>
+              <span>{getExitCountryLabel()}</span>
+              <span className="text-[10px] text-[#8E899E]">Change</span>
             </button>
           </div>
-        )}
 
-        {/* Row 4: Network interface info */}
-        <div className="pt-3 flex items-center justify-between text-[11px]">
-          <span className="text-zinc-500">Routing Interface</span>
-          <span className="font-mono text-zinc-400">{status.virtualInterface} (Transparent)</span>
+          <div className="flex items-center justify-between pb-2.5 border-b border-[#1B1824]">
+            <span className="text-[#8E899E]">Public IP</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-medium text-[#F4F3F7]">
+                {status.publicIp || 'Tor Relay Verified'}
+              </span>
+              {status.publicIp && (
+                <button
+                  onClick={handleCopyIp}
+                  className="p-1 text-[#8E899E] hover:text-[#F4F3F7] rounded transition-colors cursor-pointer"
+                  title="Copy IP"
+                >
+                  {copiedIp ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-[#8E899E]">Session duration</span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[#F4F3F7]">{uptimeStr}</span>
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                title="Request New Tor Circuit"
+                className="text-[11px] text-[#6C4DFF] hover:text-[#8E75FF] font-medium flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>New circuit</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compact Privacy & Security Status (Section 13) */}
+      <div className="w-full max-w-sm p-4 rounded-xl bg-[#121018] border border-[#1B1824] space-y-2.5 text-xs">
+        <div className="text-[11px] font-semibold text-[#8E899E] uppercase tracking-wider mb-1">
+          Privacy & Security
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[#8E899E]">Tor connection</span>
+          <span
+            className={`font-medium ${
+              isConnected ? 'text-emerald-400' : 'text-[#8E899E]'
+            }`}
+          >
+            {isConnected ? 'Active' : 'Available'}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[#8E899E]">Kill switch</span>
+          <span
+            className={`font-medium ${
+              status.killSwitchActive || isConnected ? 'text-emerald-400' : 'text-[#8E899E]'
+            }`}
+          >
+            {status.killSwitchActive || isConnected ? 'Active' : 'Ready'}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[#8E899E]">DNS protection</span>
+          <span
+            className={`font-medium ${
+              status.dnsProtected ? 'text-emerald-400' : 'text-[#8E899E]'
+            }`}
+          >
+            {status.dnsProtected ? 'Active' : 'Ready'}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-[#8E899E]">IPv6 protection</span>
+          <span
+            className={`font-medium ${
+              status.ipv6Protected ? 'text-emerald-400' : 'text-[#8E899E]'
+            }`}
+          >
+            {status.ipv6Protected ? 'Active' : 'Ready'}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between pt-1 border-t border-[#1B1824]">
+          <span className="text-[#8E899E]">Centium traffic logging</span>
+          <span className="font-medium text-[#F4F3F7]">
+            Disabled (Zero Proxy)
+          </span>
         </div>
       </div>
 
-      {/* Linux Host Integration Helper Banner */}
+      {/* Linux Physical Desktop Integration Card */}
       {onNavigateToPackages && (
-        <div className="w-full mt-4 p-3 rounded-lg bg-zinc-900/40 border border-zinc-800 text-xs text-zinc-400 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Terminal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="text-[11px]">
-              Deploy to your physical Linux desktop: <code className="text-zinc-200 font-mono">sudo ./setup-linux.sh</code>
-            </span>
+        <div className="w-full max-w-sm mt-4 p-3 rounded-xl bg-[#121018] border border-[#1B1824] text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Terminal className="w-4 h-4 text-[#6C4DFF] shrink-0" />
+            <div className="text-[11px] text-[#8E899E] leading-tight">
+              Run on your Linux system:{' '}
+              <code className="text-[#F4F3F7] font-mono">sudo ./setup-linux.sh</code>
+            </div>
           </div>
           <button
             onClick={onNavigateToPackages}
-            className="text-[11px] font-medium text-emerald-400 hover:text-emerald-300 whitespace-nowrap flex items-center gap-1 cursor-pointer"
+            className="text-[11px] text-[#6C4DFF] hover:text-[#8E75FF] font-medium shrink-0 cursor-pointer"
           >
-            <span>Guide</span>
-            <ExternalLink className="w-3 h-3" />
+            Guide →
           </button>
         </div>
       )}

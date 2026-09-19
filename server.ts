@@ -108,13 +108,34 @@ async function startServer() {
   }
 
   // Graceful termination
+  let isShuttingDown = false;
+  const handleShutdown = async (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`[Centium] Received ${signal}, starting graceful shutdown...`);
+    try {
+      await torManager.disconnect();
+    } catch (err: any) {
+      console.error(`[Centium] Error during graceful disconnect on ${signal}:`, err);
+    } finally {
+      process.exit(0);
+    }
+  };
+
   process.on('SIGTERM', () => {
-    torManager.disconnect();
-    process.exit(0);
+    handleShutdown('SIGTERM');
   });
+
   process.on('SIGINT', () => {
-    torManager.disconnect();
-    process.exit(0);
+    handleShutdown('SIGINT');
+  });
+
+  process.on('uncaughtException', (err) => {
+    console.error('[Centium Fatal] Uncaught exception:', err);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    console.error('[Centium Warning] Unhandled promise rejection:', reason);
   });
 
   app.listen(PORT, '0.0.0.0', () => {

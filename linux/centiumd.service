@@ -1,0 +1,22 @@
+[Unit]
+Description=Centium VPN Privileged Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/centiumd --socket /run/centium/centium.sock
+Restart=on-failure
+RestartSec=3s
+RuntimeDirectory=centium
+RuntimeDirectoryMode=0755
+
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectControlGroups=true
+ReadWritePaths=/run/centium /var/lib/centium /etc/resolv.conf
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+{
+  "name": "Centium VPN",
+  "description": "Privacy-focused desktop VPN application that routes system Internet traffic through the Tor network.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

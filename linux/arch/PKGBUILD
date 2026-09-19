@@ -1,0 +1,27 @@
+# Maintainer: Centium Core Team <packages@centiumvpn.org>
+pkgname=centium
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Privacy-focused desktop VPN application powered by the Tor network"
+arch=('x86_64')
+url="https://centiumvpn.org"
+license=('GPL-3.0-or-later')
+depends=('tor' 'iptables' 'iproute2' 'webkit2gtk' 'gtk3')
+makedepends=('rust' 'cargo' 'nodejs' 'npm')
+backup=('etc/centium/config.json')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname-$pkgver"
+    npm ci
+    npm run build
+    cargo build --release --locked
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    install -Dm755 target/release/centium "$pkgdir/usr/bin/centium"
+    install -Dm755 target/release/centiumd "$pkgdir/usr/bin/centiumd"
+    install -Dm644 linux/centiumd.service "$pkgdir/usr/lib/systemd/system/centiumd.service"
+}

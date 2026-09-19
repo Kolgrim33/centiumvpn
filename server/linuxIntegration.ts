@@ -10,6 +10,8 @@ WorkingDirectory=/opt/centium
 ExecStart=/usr/bin/centiumd
 Restart=always
 RestartSec=3s
+TimeoutStopSec=15s
+KillMode=control-group
 Environment=NODE_ENV=production
 RuntimeDirectory=centium
 RuntimeDirectoryMode=0775
@@ -45,8 +47,11 @@ find_executable() {
 IPTABLES="\$(find_executable iptables || true)"
 IP6TABLES="\$(find_executable ip6tables || true)"
 
+# 1. Determine Tor user / UID (support env vars or positional arguments)
 if [ -n "\${CENTIUM_TOR_UID:-}" ]; then
     TOR_UID="\$CENTIUM_TOR_UID"
+elif [ -n "\${2:-}" ] && [ "\${1:-}" = "enable" ]; then
+    TOR_UID="\$2"
 elif id "tor" &>/dev/null; then
     TOR_UID="tor"
 elif id "debian-tor" &>/dev/null; then
@@ -55,8 +60,17 @@ else
     TOR_UID="\$(id -un)"
 fi
 
-TRANS_PORT="\${TRANS_PORT:-9040}"
-DNS_PORT="\${DNS_PORT:-5353}"
+if [ -n "\${3:-}" ] && [ "\${1:-}" = "enable" ]; then
+    TRANS_PORT="\$3"
+else
+    TRANS_PORT="\${TRANS_PORT:-9040}"
+fi
+
+if [ -n "\${4:-}" ] && [ "\${1:-}" = "enable" ]; then
+    DNS_PORT="\$4"
+else
+    DNS_PORT="\${DNS_PORT:-5353}"
+fi
 RESOLV_BACKUP="/run/centium/resolv.conf.backup"
 
 verify_prerequisites() {
@@ -197,8 +211,16 @@ case "\${1:-}" in
             echo "iptables not found"
         fi
         ;;
+    verify)
+        if [ -z "\$IPTABLES" ]; then
+            echo "[Centium Error] iptables executable not found" >&2
+            exit 1
+        fi
+        \$IPTABLES -w -t nat -C OUTPUT -j CENTIUM_NAT 2>/dev/null && \
+        \$IPTABLES -w -t filter -C OUTPUT -j CENTIUM_FILTER 2>/dev/null
+        ;;
     *)
-        echo "Usage: \$0 {enable|disable|status}"
+        echo "Usage: \$0 {enable|disable|status|verify}"
         exit 1
         ;;
 esac

@@ -100,12 +100,14 @@ chmod 755 /usr/local/bin/centium-routing /usr/bin/centium-routing
 # 6. Sudoers rule so Centium can manage transparent routing without password prompts
 echo "[6/8] Configuring passwordless sudo rules (/etc/sudoers.d/centium)..."
 cat << 'EOF' > /etc/sudoers.d/centium
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing enable
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing disable
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing status
-ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing enable
-ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing disable
-ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing status
+Defaults env_keep += "CENTIUM_TOR_UID TRANS_PORT DNS_PORT"
+ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing
+ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing *
+ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing
+ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing *
+ALL ALL=(ALL) NOPASSWD: /sbin/iptables
+ALL ALL=(ALL) NOPASSWD: /usr/sbin/iptables
+ALL ALL=(ALL) NOPASSWD: /usr/bin/iptables
 ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop tor
 ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl start tor
 ALL ALL=(ALL) NOPASSWD: /usr/bin/killall tor
@@ -113,6 +115,9 @@ ALL ALL=(ALL) NOPASSWD: /usr/bin/pkill -9 tor
 ALL ALL=(ALL) NOPASSWD: /usr/bin/pkill -9 -f ^tor
 EOF
 chmod 440 /etc/sudoers.d/centium
+if command -v visudo &>/dev/null; then
+    visudo -cf /etc/sudoers.d/centium || echo "[!] Notice: visudo validation on /etc/sudoers.d/centium"
+fi
 
 # 7. Install Centium Daemon & Systemd Service
 echo "[7/8] Installing centiumd executable and systemd service..."

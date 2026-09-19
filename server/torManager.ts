@@ -638,6 +638,18 @@ export class TorManager {
           }
         });
 
+        this.torProcess.stdout?.on('error', (err) => {
+          this.addLog(`[Tor stdout error] ${err.message}`);
+        });
+
+        this.torProcess.stderr?.on('error', (err) => {
+          this.addLog(`[Tor stderr error] ${err.message}`);
+        });
+
+        this.torProcess.on('error', (err) => {
+          this.addLog(`[Tor Process Error] ${err.message}`);
+        });
+
         this.torProcess.on('exit', (code, signal) => {
           this.lastExitCode = code;
           this.lastExitSignal = signal ? signal.toString() : null;
@@ -781,24 +793,44 @@ export class TorManager {
   }
 
   public async verifyIptablesChainsHooked(): Promise<boolean> {
+    const candidatePaths = [
+      '/usr/local/bin/centium-routing',
+      '/usr/bin/centium-routing',
+      path.resolve(process.cwd(), 'linux/centium-routing.sh'),
+    ];
+    const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
+
     return new Promise((resolve) => {
-      const pathEnv = 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"';
-      const natCmd = `sudo env ${pathEnv} iptables -w -t nat -C OUTPUT -j CENTIUM_NAT`;
-      exec(natCmd, (natErr) => {
-        if (natErr) {
-          this.addLog(`[NetManager Audit] CENTIUM_NAT hook check failed: ${natErr.message}`);
+      // 1. Prefer calling centium-routing verify directly (matches NOPASSWD in sudoers without requiring env)
+      if (scriptPath) {
+        exec(`sudo "${scriptPath}" verify`, (scriptErr) => {
+          if (!scriptErr) {
+            return resolve(true);
+          }
+          this.checkIptablesDirectly(resolve);
+        });
+      } else {
+        this.checkIptablesDirectly(resolve);
+      }
+    });
+  }
+
+  private checkIptablesDirectly(resolve: (val: boolean) => void) {
+    const natCmd = 'sudo iptables -w -t nat -C OUTPUT -j CENTIUM_NAT';
+    exec(natCmd, (natErr) => {
+      if (natErr) {
+        this.addLog(`[NetManager Audit] CENTIUM_NAT hook check failed: ${natErr.message}`);
+        return resolve(false);
+      }
+
+      const filterCmd = 'sudo iptables -w -t filter -C OUTPUT -j CENTIUM_FILTER';
+      exec(filterCmd, (filterErr) => {
+        if (filterErr) {
+          this.addLog(`[NetManager Audit] CENTIUM_FILTER hook check failed: ${filterErr.message}`);
           return resolve(false);
         }
 
-        const filterCmd = `sudo env ${pathEnv} iptables -w -t filter -C OUTPUT -j CENTIUM_FILTER`;
-        exec(filterCmd, (filterErr) => {
-          if (filterErr) {
-            this.addLog(`[NetManager Audit] CENTIUM_FILTER hook check failed: ${filterErr.message}`);
-            return resolve(false);
-          }
-
-          resolve(true);
-        });
+        resolve(true);
       });
     });
   }
@@ -832,7 +864,8 @@ export class TorManager {
     }
 
     const envPrefix = `CENTIUM_TOR_UID="${torUid}" TRANS_PORT="${this.config.transportPort}" DNS_PORT="${this.config.dnsPort}"`;
-    const cmd = `sudo ${envPrefix} "${scriptPath}" enable`;
+    // Pass both env vars and positional arguments so routing works even if an environment scrubs variables
+    const cmd = `sudo ${envPrefix} "${scriptPath}" enable "${torUid}" "${this.config.transportPort}" "${this.config.dnsPort}"`;
 
     this.addLog(`[NetManager] Executing: ${cmd}`);
 

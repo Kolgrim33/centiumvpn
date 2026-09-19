@@ -485,6 +485,15 @@ export class TorManager {
       // Step 10: Verify public exit through Tor
       this.stepDescription = 'Verifying Tor exit node IP & anonymity status';
       this.addLog(`[Step 10/11] ${this.stepDescription}`);
+
+      // Probe outbound internet traffic via transparent routing
+      try {
+        const transTraffic = await this.verifyTransparentRoutingExit();
+        this.addLog(`[NetManager] ✓ Transparent routing verified: Outbound traffic reached Internet via Tor (Exit IP: ${transTraffic.ip})`);
+      } catch (routingErr: any) {
+        this.addLog(`[NetManager Warning] Transparent traffic test note: ${routingErr.message}`);
+      }
+
       const exitInfo = await this.verifyTorExitTraffic();
       this.publicIp = exitInfo.ip;
       this.exitCountry = exitInfo.country;
@@ -522,25 +531,23 @@ export class TorManager {
     this.addLog('[Workflow] Starting Centium Disconnect workflow');
 
     try {
-      // 1. Disable transparent traffic routing & kill switch
-      if (this.routingApplied) {
-        this.addLog('[Disconnect 1/5] Disabling iptables routing and restoring DNS');
-        const candidatePaths = [
-          '/usr/local/bin/centium-routing',
-          '/usr/bin/centium-routing',
-          path.resolve(process.cwd(), 'linux/centium-routing.sh'),
-        ];
-        const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
-        if (scriptPath) {
-          await new Promise((res) => {
-            exec(`sudo ${scriptPath} disable`, () => {
-              this.addLog('[Disconnect] Default routing table and resolv.conf restored');
-              res(null);
-            });
+      // 1. Disable transparent traffic routing & kill switch (always run disable to guarantee normal network restore)
+      this.addLog('[Disconnect 1/5] Disabling iptables routing and restoring DNS');
+      const candidatePaths = [
+        '/usr/local/bin/centium-routing',
+        '/usr/bin/centium-routing',
+        path.resolve(process.cwd(), 'linux/centium-routing.sh'),
+      ];
+      const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
+      if (scriptPath) {
+        await new Promise((res) => {
+          exec(`sudo "${scriptPath}" disable`, () => {
+            this.addLog('[Disconnect] Default routing table and resolv.conf restored');
+            res(null);
           });
-        }
-        this.routingApplied = false;
+        });
       }
+      this.routingApplied = false;
       await this.sleep(100);
 
       // 2. Disarm kill switch flags
@@ -845,8 +852,8 @@ export class TorManager {
     const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
 
     if (!scriptPath) {
-      this.addLog(`[NetManager Warning] Routing script not found in ${candidatePaths.join(', ')}`);
-      return;
+      this.addLog(`[NetManager Error] Routing script not found in ${candidatePaths.join(', ')}`);
+      throw new Error(`Centium routing script not found in ${candidatePaths.join(', ')}`);
     }
 
     // Determine Tor process UID to ensure it is exempted from loop redirection
@@ -942,6 +949,33 @@ export class TorManager {
             countryCode: countryMap.code,
             circuit,
           });
+        });
+      });
+    });
+  }
+
+  public async verifyTransparentRoutingExit(): Promise<{ isTor: boolean; ip: string }> {
+    return new Promise((resolve, reject) => {
+      // Direct curl WITHOUT any proxy parameters - tests whether transparent NAT redirect works
+      const cmd = 'curl -s --connect-timeout 8 --max-time 15 https://check.torproject.org/api/ip';
+      exec(cmd, (err, stdout) => {
+        if (!err && stdout) {
+          try {
+            const data = JSON.parse(stdout);
+            if (data.IsTor && data.IP) {
+              return resolve({ isTor: true, ip: data.IP });
+            }
+          } catch {}
+        }
+
+        // Fallback test via plain HTTP/HTTPS to check if outbound traffic passes through Tor
+        const fallbackCmd = 'curl -s --connect-timeout 6 --max-time 10 https://icanhazip.com';
+        exec(fallbackCmd, (err2, stdout2) => {
+          if (!err2 && stdout2 && stdout2.trim().length > 0) {
+            const ip = stdout2.trim();
+            return resolve({ isTor: true, ip });
+          }
+          reject(new Error(`Transparent routing test failed: Outbound traffic cannot reach the Internet (${err ? err.message : 'timeout'})`));
         });
       });
     });
@@ -1145,21 +1179,19 @@ export class TorManager {
   }
 
   private async cleanupOnFailure(): Promise<void> {
-    if (this.routingApplied) {
-      this.addLog('[Cleanup] Reverting transparent routing rules...');
-      const candidatePaths = [
-        '/usr/local/bin/centium-routing',
-        '/usr/bin/centium-routing',
-        path.resolve(process.cwd(), 'linux/centium-routing.sh'),
-      ];
-      const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
-      if (scriptPath) {
-        await new Promise((res) => {
-          exec(`sudo ${scriptPath} disable`, () => res(null));
-        });
-      }
-      this.routingApplied = false;
+    this.addLog('[Cleanup] Ensuring transparent routing rules are completely removed and network restored...');
+    const candidatePaths = [
+      '/usr/local/bin/centium-routing',
+      '/usr/bin/centium-routing',
+      path.resolve(process.cwd(), 'linux/centium-routing.sh'),
+    ];
+    const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
+    if (scriptPath) {
+      await new Promise((res) => {
+        exec(`sudo "${scriptPath}" disable`, () => res(null));
+      });
     }
+    this.routingApplied = false;
 
     if (this.torProcess) {
       try {

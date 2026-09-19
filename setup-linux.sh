@@ -63,13 +63,22 @@ chmod 775 /run/centium
 chmod 755 /var/lib/centium
 chmod 700 /var/lib/centium/tor
 
-# Set correct ownership for Tor
+# Set correct ownership for Tor and ensure account is not expired
 if id "tor" &>/dev/null; then
     chown root:tor /run/centium 2>/dev/null || true
     chown -R tor:tor /var/lib/centium/tor
+    chage -E -1 tor 2>/dev/null || true
 elif id "debian-tor" &>/dev/null; then
     chown root:debian-tor /run/centium 2>/dev/null || true
     chown -R debian-tor:debian-tor /var/lib/centium/tor
+    chage -E -1 debian-tor 2>/dev/null || true
+fi
+
+# Pre-load netfilter kernel modules
+if command -v modprobe &>/dev/null; then
+    for mod in ip_tables iptable_filter iptable_nat nf_nat xt_REDIRECT xt_owner xt_conntrack xt_tcpudp; do
+        modprobe "$mod" 2>/dev/null || true
+    done
 fi
 
 # 4. Build application
@@ -106,8 +115,23 @@ ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-routing *
 ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing
 ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-routing *
 ALL ALL=(ALL) NOPASSWD: /sbin/iptables
+ALL ALL=(ALL) NOPASSWD: /sbin/iptables *
 ALL ALL=(ALL) NOPASSWD: /usr/sbin/iptables
+ALL ALL=(ALL) NOPASSWD: /usr/sbin/iptables *
 ALL ALL=(ALL) NOPASSWD: /usr/bin/iptables
+ALL ALL=(ALL) NOPASSWD: /usr/bin/iptables *
+ALL ALL=(ALL) NOPASSWD: /sbin/ip6tables
+ALL ALL=(ALL) NOPASSWD: /sbin/ip6tables *
+ALL ALL=(ALL) NOPASSWD: /usr/sbin/ip6tables
+ALL ALL=(ALL) NOPASSWD: /usr/sbin/ip6tables *
+ALL ALL=(ALL) NOPASSWD: /usr/bin/ip6tables
+ALL ALL=(ALL) NOPASSWD: /usr/bin/ip6tables *
+ALL ALL=(ALL) NOPASSWD: /sbin/modprobe
+ALL ALL=(ALL) NOPASSWD: /sbin/modprobe *
+ALL ALL=(ALL) NOPASSWD: /usr/sbin/modprobe
+ALL ALL=(ALL) NOPASSWD: /usr/sbin/modprobe *
+ALL ALL=(ALL) NOPASSWD: /usr/bin/modprobe
+ALL ALL=(ALL) NOPASSWD: /usr/bin/modprobe *
 ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop tor
 ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl start tor
 ALL ALL=(ALL) NOPASSWD: /usr/bin/killall tor

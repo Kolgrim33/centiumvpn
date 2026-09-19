@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Header } from './components/Header.tsx';
+import { Sidebar } from './components/Sidebar.tsx';
+import { MobileNav } from './components/MobileNav.tsx';
 import { MainConnectView } from './components/MainConnectView.tsx';
 import { ExitLocationView } from './components/ExitLocationView.tsx';
 import { BridgesView } from './components/BridgesView.tsx';
-import { PrivacyDashboardView } from './components/PrivacyDashboardView.tsx';
 import { DiagnosticsView } from './components/DiagnosticsView.tsx';
-import { NetworkInfoView } from './components/NetworkInfoView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
 import { LinuxPackagesModal } from './components/LinuxPackagesModal.tsx';
 import { SystemTrayPreview } from './components/SystemTrayPreview.tsx';
@@ -63,16 +62,16 @@ const DEFAULT_CONFIG: CentiumConfig = {
 export default function App() {
   const [status, setStatus] = useState<CentiumStatus>(DEFAULT_STATUS);
   const [config, setConfig] = useState<CentiumConfig>(DEFAULT_CONFIG);
-  const [currentTab, setCurrentTab] = useState<string>('connect');
+  const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [showTray, setShowTray] = useState<boolean>(false);
 
-  // Load initial config and status
+  // Status poller
   const refreshStatus = useCallback(async () => {
     try {
       const data = await fetchStatus();
       setStatus(data);
     } catch {
-      // ignore transient poll error
+      // transient network error during reload
     }
   }, []);
 
@@ -83,7 +82,7 @@ export default function App() {
     refreshStatus();
   }, [refreshStatus]);
 
-  // Dynamic status poll interval based on connection state
+  // Dynamic status poll interval
   useEffect(() => {
     const isBusy =
       status.state === 'STARTING' ||
@@ -155,35 +154,44 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-300">
-      {/* Top Application Bar */}
-      <Header
+    <div className="min-h-screen bg-[#0D0B12] text-[#F4F3F7] flex flex-col md:flex-row antialiased selection:bg-[#6C4DFF]/30 selection:text-[#F4F3F7]">
+      {/* Desktop Sidebar (Section 7) */}
+      <div className="hidden md:flex">
+        <Sidebar
+          currentTab={currentTab}
+          onSelectTab={setCurrentTab}
+          connectionState={status.state}
+          showTray={showTray}
+          onToggleTray={() => setShowTray(!showTray)}
+        />
+      </div>
+
+      {/* Mobile Top Header and Bottom Navigation (Section 10) */}
+      <MobileNav
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         connectionState={status.state}
-        showTray={showTray}
-        onToggleTray={() => setShowTray(!showTray)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col justify-center items-center px-4 py-4 w-full">
-        {currentTab === 'connect' && (
+      {/* Main Content Pane (Section 7, 8, 17) */}
+      <main className="flex-1 flex flex-col justify-center items-center px-4 py-8 pb-24 md:pb-8 w-full max-w-4xl mx-auto">
+        {currentTab === 'dashboard' && (
           <MainConnectView
             status={status}
             config={config}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
             onRefreshCircuit={handleRefreshCircuit}
-            onNavigateToExit={() => setCurrentTab('exit')}
-            onNavigateToPackages={() => setCurrentTab('packages')}
+            onNavigateToExit={() => setCurrentTab('locations')}
+            onNavigateToPackages={() => setCurrentTab('about')}
           />
         )}
 
-        {currentTab === 'exit' && (
+        {currentTab === 'locations' && (
           <ExitLocationView
             config={config}
             onSaveConfig={handleSaveConfig}
-            onBack={() => setCurrentTab('connect')}
+            onBack={() => setCurrentTab('dashboard')}
             isConnected={status.state === 'CONNECTED'}
             onRefreshCircuit={handleRefreshCircuit}
           />
@@ -193,29 +201,14 @@ export default function App() {
           <BridgesView
             config={config}
             onSaveConfig={handleSaveConfig}
-            onBack={() => setCurrentTab('connect')}
-          />
-        )}
-
-        {currentTab === 'privacy' && (
-          <PrivacyDashboardView
-            status={status}
-            onBack={() => setCurrentTab('connect')}
+            onBack={() => setCurrentTab('dashboard')}
           />
         )}
 
         {currentTab === 'diagnostics' && (
           <DiagnosticsView
             status={status}
-            onBack={() => setCurrentTab('connect')}
-          />
-        )}
-
-        {currentTab === 'network' && (
-          <NetworkInfoView
-            status={status}
-            onBack={() => setCurrentTab('connect')}
-            onRefreshCircuit={handleRefreshCircuit}
+            onBack={() => setCurrentTab('dashboard')}
           />
         )}
 
@@ -223,16 +216,16 @@ export default function App() {
           <SettingsView
             config={config}
             onSaveConfig={handleSaveConfig}
-            onBack={() => setCurrentTab('connect')}
+            onBack={() => setCurrentTab('dashboard')}
           />
         )}
 
-        {currentTab === 'packages' && (
-          <LinuxPackagesModal onBack={() => setCurrentTab('connect')} />
+        {currentTab === 'about' && (
+          <LinuxPackagesModal onBack={() => setCurrentTab('dashboard')} />
         )}
       </main>
 
-      {/* Interactive System Tray Simulation */}
+      {/* Desktop System Tray Context Menu Simulation (Section 3, 23) */}
       {showTray && (
         <SystemTrayPreview
           status={status}
@@ -249,20 +242,6 @@ export default function App() {
           onClose={() => setShowTray(false)}
         />
       )}
-
-      {/* Footer bar */}
-      <footer className="border-t border-zinc-900 bg-zinc-950 py-2.5 px-4 text-center text-[11px] font-mono text-zinc-500">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1">
-          <div>Centium VPN v1.0.0 — Arch & Debian Linux Target</div>
-          <div className="flex items-center gap-3">
-            <span>Interface: {status.virtualInterface}</span>
-            <span>•</span>
-            <span>Kill Switch: {status.killSwitchActive ? 'ARMED' : 'STANDBY'}</span>
-            <span>•</span>
-            <span>Zero Backend Proxies</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

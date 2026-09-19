@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Globe, Check, Info, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Globe, ArrowLeft, Check, Info } from 'lucide-react';
 import { CentiumConfig } from '../types.ts';
 
 interface ExitLocationViewProps {
@@ -7,15 +7,29 @@ interface ExitLocationViewProps {
   onSaveConfig: (newConfig: Partial<CentiumConfig>) => Promise<void>;
   onBack: () => void;
   isConnected: boolean;
-  onRefreshCircuit: () => void;
+  onRefreshCircuit: () => Promise<void>;
 }
 
-interface CountryOption {
+interface LocationOption {
   code: string;
   name: string;
-  region: string;
   flag: string;
+  description: string;
 }
+
+const LOCATIONS: LocationOption[] = [
+  { code: 'auto', name: 'Automatic', flag: '🌐', description: 'Fastest available circuit based on Tor consensus' },
+  { code: 'nl', name: 'Netherlands', flag: '🇳🇱', description: 'High-bandwidth European Tor relay cluster' },
+  { code: 'de', name: 'Germany', flag: '🇩🇪', description: 'Extensive Tor node infrastructure' },
+  { code: 'us', name: 'United States', flag: '🇺🇸', description: 'Large distribution of high-speed exit relays' },
+  { code: 'gb', name: 'United Kingdom', flag: '🇬🇧', description: 'Western European routing path' },
+  { code: 'ch', name: 'Switzerland', flag: '🇨🇭', description: 'Central European privacy-centric relays' },
+  { code: 'se', name: 'Sweden', flag: '🇸🇪', description: 'Nordic region exit nodes' },
+  { code: 'ca', name: 'Canada', flag: '🇨🇦', description: 'North American routing nodes' },
+  { code: 'fr', name: 'France', flag: '🇫🇷', description: 'Western European Tor network exit' },
+  { code: 'is', name: 'Iceland', flag: '🇮🇸', description: 'Strong local privacy laws and independent relays' },
+  { code: 'jp', name: 'Japan', flag: '🇯🇵', description: 'East Asia region exit nodes' },
+];
 
 export const ExitLocationView: React.FC<ExitLocationViewProps> = ({
   config,
@@ -24,37 +38,20 @@ export const ExitLocationView: React.FC<ExitLocationViewProps> = ({
   isConnected,
   onRefreshCircuit,
 }) => {
-  const [selected, setSelected] = useState(config.exitLocation || 'auto');
+  const [selectedCode, setSelectedCode] = useState<string>(config.exitLocation || 'auto');
   const [saving, setSaving] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
-
-  const countries: CountryOption[] = [
-    { code: 'auto', name: 'Automatic', region: 'Fastest available circuit', flag: '⚡' },
-    { code: 'any', name: 'Any Country', region: 'Global Tor consensus', flag: '🌐' },
-    { code: 'nl', name: 'Netherlands', region: 'Europe', flag: '🇳🇱' },
-    { code: 'de', name: 'Germany', region: 'Europe', flag: '🇩🇪' },
-    { code: 'ch', name: 'Switzerland', region: 'Europe', flag: '🇨🇭' },
-    { code: 'se', name: 'Sweden', region: 'Europe', flag: '🇸🇪' },
-    { code: 'us', name: 'United States', region: 'North America', flag: '🇺🇸' },
-    { code: 'gb', name: 'United Kingdom', region: 'Europe', flag: '🇬🇧' },
-    { code: 'ca', name: 'Canada', region: 'North America', flag: '🇨🇦' },
-    { code: 'fr', name: 'France', region: 'Europe', flag: '🇫🇷' },
-    { code: 'is', name: 'Iceland', region: 'Europe', flag: '🇮🇸' },
-    { code: 'ro', name: 'Romania', region: 'Europe', flag: '🇷🇴' },
-    { code: 'jp', name: 'Japan', region: 'Asia Pacific', flag: '🇯🇵' },
-  ];
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const handleSelect = async (code: string) => {
-    setSelected(code);
+    setSelectedCode(code);
     setSaving(true);
     try {
       await onSaveConfig({ exitLocation: code });
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 2500);
+      setSaveSuccess(true);
       if (isConnected) {
-        // Trigger circuit rebuild with new exit country
         await onRefreshCircuit();
       }
+      setTimeout(() => setSaveSuccess(false), 2000);
     } finally {
       setSaving(false);
     }
@@ -62,99 +59,82 @@ export const ExitLocationView: React.FC<ExitLocationViewProps> = ({
 
   return (
     <div className="w-full max-w-xl mx-auto py-6 px-4">
-      {/* Header with back button */}
-      <div className="flex items-center justify-between pb-4 border-b border-zinc-800 mb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-[#1B1824] mb-5">
         <div className="flex items-center gap-3">
           <button
             id="btn-back-from-exit"
             onClick={onBack}
-            className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg hover:bg-[#17141E] text-[#8E899E] hover:text-[#F4F3F7] transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h2 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-emerald-400" />
-              Exit Location
+            <h2 className="text-base font-semibold text-[#F4F3F7] flex items-center gap-2">
+              <Globe className="w-4 h-4 text-[#6C4DFF]" />
+              Tor Exit Locations
             </h2>
-            <p className="text-xs text-zinc-400">
-              Select preferred exit relay country for Tor circuit routing
+            <p className="text-xs text-[#8E899E]">
+              Select preferred exit relay jurisdiction
             </p>
           </div>
         </div>
 
-        {savedSuccess && (
-          <span className="text-xs font-mono text-emerald-400 flex items-center gap-1">
-            <Check className="w-3.5 h-3.5" /> Saved
+        {saveSuccess && (
+          <span className="text-xs font-medium text-emerald-400 flex items-center gap-1">
+            <Check className="w-3.5 h-3.5" /> Updated
           </span>
         )}
       </div>
 
-      {/* Tor Notice Box (Section 14 requirement) */}
-      <div className="mb-6 p-3.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 flex items-start gap-3">
-        <Info className="w-4 h-4 shrink-0 text-zinc-500 mt-0.5" />
-        <div className="space-y-1 leading-relaxed">
-          <p className="text-zinc-300">
-            Centium uses Tor's standard <code className="text-emerald-400 font-mono">ExitNodes</code> configuration.
-          </p>
-          <p className="text-zinc-500">
-            Exit-location availability depends entirely on active exit relays in the Tor network consensus.
-            Centium never runs private relays or alters Tor's path selection cryptography.
-          </p>
+      {/* Honest Technical Explanation Notice (Section 12) */}
+      <div className="mb-5 p-3.5 rounded-xl bg-[#121018] border border-[#1B1824] text-xs text-[#8E899E] flex items-start gap-2.5">
+        <Info className="w-4 h-4 text-[#6C4DFF] shrink-0 mt-0.5" />
+        <div className="leading-relaxed">
+          <strong className="text-[#F4F3F7] font-medium">Tor Network Routing: </strong>
+          Tor determines the cryptographic 3-hop relay path. Centium configures your preferences
+          via standard Tor <code className="text-[#F4F3F7] font-mono">ExitNodes</code> directives.
+          Centium does not operate a centralized VPN server fleet.
         </div>
       </div>
 
-      {/* Country List */}
+      {/* Locations List */}
       <div className="space-y-1.5">
-        {countries.map((country) => {
-          const isChosen = selected.toLowerCase() === country.code.toLowerCase();
+        {LOCATIONS.map((loc) => {
+          const isSelected = selectedCode === loc.code;
           return (
             <button
-              key={country.code}
-              id={`exit-choice-${country.code}`}
-              onClick={() => handleSelect(country.code)}
+              key={loc.code}
+              id={`exit-loc-${loc.code}`}
+              onClick={() => handleSelect(loc.code)}
               disabled={saving}
-              className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left cursor-pointer ${
-                isChosen
-                  ? 'bg-zinc-800/80 border-emerald-500/60 text-zinc-100 shadow-xs'
-                  : 'bg-zinc-900/50 border-zinc-800/80 text-zinc-300 hover:bg-zinc-800/40 hover:border-zinc-700'
+              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                isSelected
+                  ? 'bg-[#17141E] border-[#6C4DFF]/40 text-[#F4F3F7]'
+                  : 'bg-[#121018] border-[#1B1824] text-[#8E899E] hover:text-[#F4F3F7] hover:bg-[#15121D]'
               }`}
             >
               <div className="flex items-center gap-3">
-                <span className="text-base">{country.flag}</span>
+                <span className="text-base select-none">{loc.flag}</span>
                 <div>
-                  <div className="text-xs font-medium text-zinc-200">{country.name}</div>
-                  <div className="text-[11px] text-zinc-500">{country.region}</div>
+                  <div className="text-xs font-medium text-[#F4F3F7]">
+                    {loc.name}
+                  </div>
+                  <div className="text-[11px] text-[#8E899E]">
+                    {loc.description}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {country.code !== 'auto' && country.code !== 'any' && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700/50 text-zinc-400 uppercase">
-                    {country.code}
-                  </span>
-                )}
-                <div
-                  className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${
-                    isChosen
-                      ? 'border-emerald-500 bg-emerald-500 text-zinc-950'
-                      : 'border-zinc-700 bg-zinc-900'
-                  }`}
-                >
-                  {isChosen && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+              {isSelected && (
+                <div className="w-5 h-5 rounded-full bg-[#6C4DFF]/20 border border-[#6C4DFF] flex items-center justify-center text-[#6C4DFF] shrink-0">
+                  <Check className="w-3 h-3 stroke-[2.5]" />
                 </div>
-              </div>
+              )}
             </button>
           );
         })}
       </div>
-
-      {isConnected && (
-        <div className="mt-6 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Active circuits renew automatically when location preferences change.</span>
-        </div>
-      )}
     </div>
   );
 };

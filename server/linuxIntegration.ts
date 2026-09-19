@@ -12,7 +12,7 @@ Restart=always
 RestartSec=3s
 Environment=NODE_ENV=production
 RuntimeDirectory=centium
-RuntimeDirectoryMode=0755
+RuntimeDirectoryMode=0775
 
 [Install]
 WantedBy=multi-user.target
@@ -42,6 +42,10 @@ verify_prerequisites() {
     if command -v ss &>/dev/null; then
         if ! ss -tln | grep -q ":\${TRANS_PORT}\\b"; then
             echo "[Centium Error] Tor TransPort :\${TRANS_PORT} is not listening!" >&2
+            return 1
+        fi
+        if ! ss -tln | grep -q ":9050\\b"; then
+            echo "[Centium Error] Tor SocksPort :9050 is not listening!" >&2
             return 1
         fi
     fi

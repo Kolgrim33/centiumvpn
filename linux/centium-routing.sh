@@ -22,10 +22,15 @@ DNS_PORT="${DNS_PORT:-5353}"
 RESOLV_BACKUP="/run/centium/resolv.conf.backup"
 
 verify_prerequisites() {
-    # Verify that Tor is actually listening on TransPort (9040) and DNSPort (5353)
+    # Verify that Tor is actually listening on TransPort (9040) and SocksPort (9050)
     if command -v ss &>/dev/null; then
         if ! ss -tln | grep -q ":${TRANS_PORT}\b"; then
             echo "[Centium Error] Tor TransPort :${TRANS_PORT} is not listening!" >&2
+            echo "[Centium Error] Refusing to enable transparent routing (prevents dead network)." >&2
+            return 1
+        fi
+        if ! ss -tln | grep -q ":9050\b"; then
+            echo "[Centium Error] Tor SocksPort :9050 is not listening!" >&2
             echo "[Centium Error] Refusing to enable transparent routing (prevents dead network)." >&2
             return 1
         fi

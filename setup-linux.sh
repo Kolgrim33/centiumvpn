@@ -59,13 +59,16 @@ systemctl disable tor 2>/dev/null || true
 echo "[3/8] Creating runtime directories (/run/centium, /var/lib/centium/tor, /opt/centium)..."
 mkdir -p /run/centium
 mkdir -p /var/lib/centium/tor
-chmod 755 /run/centium
+chmod 775 /run/centium
+chmod 755 /var/lib/centium
 chmod 700 /var/lib/centium/tor
 
 # Set correct ownership for Tor
 if id "tor" &>/dev/null; then
+    chown root:tor /run/centium 2>/dev/null || true
     chown -R tor:tor /var/lib/centium/tor
 elif id "debian-tor" &>/dev/null; then
+    chown root:debian-tor /run/centium 2>/dev/null || true
     chown -R debian-tor:debian-tor /var/lib/centium/tor
 fi
 

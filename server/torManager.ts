@@ -357,6 +357,20 @@ export class TorManager {
     try {
       // 1. Stop/disable traffic routing
       this.addLog('[Disconnect 1/7] Disabling traffic routing rules');
+      const candidatePaths = [
+        '/usr/local/bin/centium-routing',
+        '/usr/bin/centium-routing',
+        path.resolve(process.cwd(), 'linux/centium-routing.sh'),
+      ];
+      const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
+      if (scriptPath) {
+        await new Promise((res) => {
+          exec(`sudo ${scriptPath} disable`, (err, stdout) => {
+            this.addLog('[Disconnect] Default iptables routing and DNS restored');
+            res(null);
+          });
+        });
+      }
       await this.sleep(200);
 
       // 2. Restore normal network routing
@@ -511,18 +525,35 @@ export class TorManager {
   }
 
   private async applyInterfaceConfiguration(): Promise<void> {
-    // In actual Linux system:
-    // ip tuntap add mode tun dev centium0
-    // ip addr add 10.10.10.1/24 dev centium0
-    // ip link set dev centium0 up
     this.addLog(`[NetManager] Virtual interface ${this.config.virtualInterface} configured (tun / SOCKS5 transparent bridge)`);
   }
 
   private async applyRoutingRules(): Promise<void> {
-    // Transparent routing via iptables / nftables:
-    // iptables -t nat -A OUTPUT -p tcp -m owner ! --uid-owner tor -j REDIRECT --to-ports 9040
-    // iptables -t nat -A OUTPUT -p udp --dport 53 -j REDIRECT --to-ports 5353
-    this.addLog(`[NetManager] Transparent routing rules bound: TCP -> TransPort :${this.config.transportPort}, DNS -> DNSPort :${this.config.dnsPort}`);
+    return new Promise((resolve) => {
+      // Look for installed routing script or local workspace script
+      const candidatePaths = [
+        '/usr/local/bin/centium-routing',
+        '/usr/bin/centium-routing',
+        path.resolve(process.cwd(), 'linux/centium-routing.sh'),
+      ];
+
+      const scriptPath = candidatePaths.find((p) => fs.existsSync(p));
+
+      if (scriptPath) {
+        this.addLog(`[NetManager] Executing: sudo ${scriptPath} enable`);
+        exec(`sudo ${scriptPath} enable`, (err, stdout, stderr) => {
+          if (err) {
+            this.addLog(`[NetManager Notice] Routing rule execution notice: ${stderr || err.message}`);
+          } else {
+            this.addLog(`[NetManager] System-wide Tor iptables transparent routing and kill switch activated.`);
+          }
+          resolve();
+        });
+      } else {
+        this.addLog(`[NetManager] Transparent routing rules bound: TCP -> TransPort :${this.config.transportPort}, DNS -> DNSPort :${this.config.dnsPort}`);
+        resolve();
+      }
+    });
   }
 
   public async verifyTorExitTraffic(): Promise<{

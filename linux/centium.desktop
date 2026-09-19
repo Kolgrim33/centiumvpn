@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Centium VPN
+GenericName=Tor Privacy VPN
+Comment=Privacy-focused desktop VPN application that routes system Internet traffic through the Tor network
+Exec=/usr/local/bin/centium-desktop
+Icon=centium
+Terminal=false
+Type=Application
+Categories=Network;Security;VPN;
+StartupWMClass=CentiumVPN
+Keywords=tor;vpn;privacy;security;onion;proxy;

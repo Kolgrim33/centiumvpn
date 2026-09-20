@@ -35,6 +35,7 @@ export class TorManager {
   private torExitedPrematurely = false;
   private lastExitCode: number | null = null;
   private lastExitSignal: string | null = null;
+  private watchdogTimer: NodeJS.Timeout | null = null;
 
   private config: CentiumConfig = {
     exitLocation: 'auto',
@@ -632,6 +633,7 @@ export class TorManager {
       this.connectedSince = Date.now();
       this.errorMessage = null;
       this.startTrafficMonitor();
+      this.startSupervisionWatchdog();
 
       this.addLog(`[Connect] ✓ Centium VPN CONNECTED. Public IP: ${this.publicIp} (${this.exitCountry})`);
       return true;
@@ -641,6 +643,8 @@ export class TorManager {
       this.state = 'ERROR';
       this.statusMessage = 'Connection failed';
       await this.cleanupOnFailure();
+      this.state = 'DISCONNECTED';
+      this.statusMessage = 'Disconnected after failure';
       return false;
     }
   }
@@ -650,6 +654,7 @@ export class TorManager {
   // ---------------------------------------------------------------------------
   public async disconnect(): Promise<boolean> {
     this.addLog('[Workflow] Disconnecting Centium VPN...');
+    this.stopSupervisionWatchdog();
     this.state = 'DISCONNECTING';
     this.statusMessage = 'Restoring normal networking...';
 
@@ -934,7 +939,89 @@ export class TorManager {
     }, 2000);
   }
 
+  private startSupervisionWatchdog() {
+    this.stopSupervisionWatchdog();
+    this.watchdogTimer = setInterval(async () => {
+      if (this.state !== 'CONNECTED') {
+        this.stopSupervisionWatchdog();
+        return;
+      }
+
+      // 1. Check Tor process alive
+      if (!this.isTorProcessAlive()) {
+        this.addLog('[Watchdog Alert] Tor daemon process died! Triggering emergency fail-closed cleanup...');
+        this.stopSupervisionWatchdog();
+        await this.handleUnexpectedTorExit(this.lastExitCode, this.lastExitSignal);
+        return;
+      }
+
+      // 2. Check TUN bridge alive
+      const isBridgeAlive = this.checkBridgeAlive();
+      if (!isBridgeAlive) {
+        this.addLog('[Watchdog Alert] TUN-to-SOCKS bridge crashed or stopped! Triggering emergency fail-closed cleanup...');
+        this.stopSupervisionWatchdog();
+        await this.handleUnexpectedBridgeExit();
+        return;
+      }
+
+      // 3. Check TUN interface centium0 still exists
+      if (!this.checkTunInterfaceExists()) {
+        this.addLog('[Watchdog Alert] TUN interface centium0 disappeared! Triggering emergency fail-closed cleanup...');
+        this.stopSupervisionWatchdog();
+        await this.handleUnexpectedBridgeExit();
+        return;
+      }
+    }, 1500);
+  }
+
+  private stopSupervisionWatchdog() {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+  }
+
+  private checkBridgeAlive(): boolean {
+    const pidFile = '/run/centium/hev-socks5-tunnel.pid';
+    if (fs.existsSync(pidFile)) {
+      try {
+        const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
+        if (pid && process.kill(pid, 0)) {
+          return true;
+        }
+      } catch {
+        return false;
+      }
+    }
+    try {
+      execSync('pgrep -f "hev-socks5-tunnel|tun2socks" 2>/dev/null');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private checkTunInterfaceExists(): boolean {
+    try {
+      execSync(`ip link show ${this.config.virtualInterface} 2>/dev/null`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async handleUnexpectedBridgeExit() {
+    this.addLog('[Alert] Bridge terminated unexpectedly. Restoring normal networking...');
+    this.state = 'ERROR';
+    this.statusMessage = 'Bridge crashed';
+    this.errorMessage = 'TUN-to-SOCKS bridge process terminated unexpectedly';
+    await this.cleanupOnFailure();
+    this.state = 'DISCONNECTED';
+    this.statusMessage = 'Disconnected after bridge failure';
+  }
+
   private async cleanupOnFailure(): Promise<void> {
+    this.stopSupervisionWatchdog();
     this.addLog('[Cleanup] Ensuring TUN network state is completely rolled back and normal networking restored...');
     try {
       await this.runNetworkAction('disable');

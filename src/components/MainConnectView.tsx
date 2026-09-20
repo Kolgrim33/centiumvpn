@@ -44,7 +44,16 @@ export const MainConnectView: React.FC<MainConnectViewProps> = ({
   }, [status.connectedSince, status.state]);
 
   const isConnected = status.state === 'CONNECTED';
-  const isConnecting = status.state === 'CONNECTING' || status.state === 'STARTING';
+  const isConnecting =
+    status.state === 'STARTING_TOR' ||
+    status.state === 'WAITING_FOR_BOOTSTRAP' ||
+    status.state === 'STARTING_TUN' ||
+    status.state === 'STARTING_BRIDGE' ||
+    status.state === 'INSTALLING_ROUTING' ||
+    status.state === 'INSTALLING_KILLSWITCH' ||
+    status.state === 'VERIFYING' ||
+    status.state === 'CONNECTING' ||
+    status.state === 'STARTING';
   const isDisconnecting = status.state === 'DISCONNECTING';
   const isError = status.state === 'ERROR';
 

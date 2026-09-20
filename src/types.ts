@@ -1,11 +1,18 @@
 export type ConnectionState =
   | 'DISCONNECTED'
-  | 'STARTING'
-  | 'CONNECTING'
+  | 'STARTING_TOR'
+  | 'WAITING_FOR_BOOTSTRAP'
+  | 'STARTING_TUN'
+  | 'STARTING_BRIDGE'
+  | 'INSTALLING_ROUTING'
+  | 'INSTALLING_KILLSWITCH'
+  | 'VERIFYING'
   | 'CONNECTED'
   | 'RECONNECTING'
   | 'DISCONNECTING'
-  | 'ERROR';
+  | 'ERROR'
+  | 'STARTING'
+  | 'CONNECTING';
 
 export interface CircuitNode {
   role: 'Guard' | 'Middle' | 'Exit';
@@ -34,6 +41,8 @@ export interface CentiumStatus {
   dnsProtected: boolean;
   ipv6Protected: boolean;
   torPid: number | null;
+  bridgePid?: number | null;
+  bridgeRunning?: boolean;
   bytesReceived: number;
   bytesSent: number;
   errorMessage: string | null;
@@ -53,8 +62,6 @@ export interface CentiumConfig {
   virtualInterface: string;
   socksPort: number;
   controlPort: number;
-  dnsPort: number;
-  transportPort: number;
 }
 
 export interface DiagnosticResult {

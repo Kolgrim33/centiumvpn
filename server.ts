@@ -4,11 +4,14 @@ import { createServer as createViteServer } from 'vite';
 import { torManager } from './server/torManager.ts';
 import {
   CENTIUM_SYSTEMD_SERVICE,
+  CENTIUM_HEV_SERVICE,
+  CENTIUM_NETWORK_SCRIPT,
   CENTIUM_ROUTING_SCRIPT,
   ARCH_PKGBUILD,
   DEBIAN_CONTROL,
   RUST_DAEMON_SOURCE,
 } from './server/linuxIntegration.ts';
+import { exec } from 'child_process';
 
 async function startServer() {
   const app = express();
@@ -52,12 +55,12 @@ async function startServer() {
   });
 
   app.get('/api/config', (req, res) => {
-    res.json(torManager.config);
+    res.json(torManager.getConfig());
   });
 
   app.post('/api/config', (req, res) => {
     torManager.updateConfig(req.body);
-    res.json({ success: true, config: torManager.config });
+    res.json({ success: true, config: torManager.getConfig() });
   });
 
   app.post('/api/diagnostics/test', async (req, res) => {
@@ -67,6 +70,17 @@ async function startServer() {
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
+  });
+
+  app.get('/api/diagnostics/suite', (req, res) => {
+    const diagScript = path.resolve(process.cwd(), 'linux/centium-diagnose.sh');
+    exec(`"${diagScript}"`, (err, stdout, stderr) => {
+      res.json({
+        success: !err,
+        output: stdout || stderr,
+        exitCode: err ? err.code : 0,
+      });
+    });
   });
 
   app.post('/api/newnym', async (req, res) => {
@@ -85,6 +99,8 @@ async function startServer() {
   app.get('/api/linux-integration', (req, res) => {
     res.json({
       systemd: CENTIUM_SYSTEMD_SERVICE,
+      hevService: CENTIUM_HEV_SERVICE,
+      networkScript: CENTIUM_NETWORK_SCRIPT,
       routingScript: CENTIUM_ROUTING_SCRIPT,
       archPkgbuild: ARCH_PKGBUILD,
       debianControl: DEBIAN_CONTROL,

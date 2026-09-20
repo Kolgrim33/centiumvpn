@@ -128,7 +128,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <label className="flex items-center justify-between pt-2 cursor-pointer">
             <div>
               <div className="font-medium text-[#F4F3F7]">Kill switch</div>
-              <div className="text-[11px] text-[#8E899E]">Fail-closed iptables rules block unencrypted traffic leaks</div>
+              <div className="text-[11px] text-[#8E899E]">Fail-closed nftables rules block unencrypted traffic leaks</div>
             </div>
             <input
               type="checkbox"
@@ -141,7 +141,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <label className="flex items-center justify-between pt-2 cursor-pointer">
             <div>
               <div className="font-medium text-[#F4F3F7]">DNS protection</div>
-              <div className="text-[11px] text-[#8E899E]">Lock resolver to Tor DNSPort (127.0.0.1:5353)</div>
+              <div className="text-[11px] text-[#8E899E]">Route DNS via tunnel mapped-DNS to Tor SOCKS5</div>
             </div>
             <input
               type="checkbox"

@@ -67,25 +67,31 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
       label: 'Virtual Interface',
       statusText: status.virtualInterface || 'centium0',
       ok: isConnected,
-      detail: isConnected ? 'Active tunnel' : 'Ready',
+      detail: isConnected ? 'Real TUN device' : 'Ready',
+    },
+    {
+      label: 'TUN Bridge',
+      statusText: isConnected ? 'hev-socks5-tunnel' : 'Standby',
+      ok: isConnected,
+      detail: 'centium0 ↔ Tor SOCKS5 :9050',
     },
     {
       label: 'DNS',
       statusText: isDnsProtected ? 'Protected' : 'Unprotected',
       ok: isDnsProtected,
-      detail: 'Tor DNSPort (5353)',
+      detail: 'Tunnel Mapped-DNS (198.18.0.2)',
     },
     {
       label: 'IPv6',
       statusText: isIpv6Protected ? 'Protected' : 'Unprotected',
       ok: isIpv6Protected,
-      detail: 'Leak prevention filter',
+      detail: 'nftables fail-closed drop',
     },
     {
       label: 'Kill Switch',
       statusText: isKillSwitchActive || isConnected ? 'Active' : 'Standby',
       ok: isKillSwitchActive || isConnected,
-      detail: 'Fail-closed routing rule',
+      detail: 'nftables inet centium (Fail-closed)',
     },
   ];
 

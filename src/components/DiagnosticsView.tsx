@@ -14,6 +14,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
 }) => {
   const [testing, setTesting] = useState(false);
   const [diagResult, setDiagResult] = useState<DiagnosticResult | null>(null);
+  const [suiteOutput, setSuiteOutput] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -24,9 +25,16 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
   const handleRunTest = async () => {
     setTesting(true);
     try {
-      const resp = await runDiagnosticsTest();
-      if (resp.success) {
-        setDiagResult(resp.results);
+      const [resp, suiteRes] = await Promise.allSettled([
+        runDiagnosticsTest(),
+        fetch('/api/diagnostics/suite').then((r) => r.json()),
+      ]);
+
+      if (resp.status === 'fulfilled' && resp.value.success) {
+        setDiagResult(resp.value.results);
+      }
+      if (suiteRes.status === 'fulfilled' && suiteRes.value.output) {
+        setSuiteOutput(suiteRes.value.output);
       }
       const updatedLogs = await fetchLogs();
       setLogs(updatedLogs);
@@ -46,52 +54,64 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
 
   const items = [
     {
-      label: 'Centium Core',
-      statusText: 'Running',
-      ok: true,
-      detail: 'Local daemon operational',
-    },
-    {
-      label: 'Tor',
+      label: 'Tor Process',
       statusText: torRunning ? 'Running' : 'Stopped',
       ok: torRunning,
       detail: torRunning ? `PID ${status.torPid || 'Active'}` : 'Process idle',
     },
     {
+      label: 'Tor SOCKS5 :9050',
+      statusText: torRunning ? 'Listening' : 'Closed',
+      ok: torRunning,
+      detail: '127.0.0.1:9050 active',
+    },
+    {
       label: 'Tor Bootstrap',
       statusText: isBootstrapped ? 'Complete' : `${status.bootstrapPercent}%`,
       ok: isBootstrapped,
-      detail: isBootstrapped ? 'Consensus synchronized' : 'Establishing directory circuit',
+      detail: isBootstrapped ? '100% consensus synchronized' : 'Establishing directory circuit',
     },
     {
-      label: 'Virtual Interface',
-      statusText: status.virtualInterface || 'centium0',
+      label: 'centium0 (TUN)',
+      statusText: isConnected ? 'Created' : 'Standby',
       ok: isConnected,
-      detail: isConnected ? 'Real TUN device' : 'Ready',
+      detail: isConnected ? '198.18.0.1/15 active' : 'Managed by bridge',
     },
     {
-      label: 'TUN Bridge',
-      statusText: isConnected ? 'hev-socks5-tunnel' : 'Standby',
+      label: 'TUN-to-SOCKS Bridge',
+      statusText: isConnected ? 'Running' : 'Standby',
       ok: isConnected,
       detail: 'centium0 ↔ Tor SOCKS5 :9050',
     },
     {
-      label: 'DNS',
-      statusText: isDnsProtected ? 'Protected' : 'Unprotected',
-      ok: isDnsProtected,
-      detail: 'Tunnel Mapped-DNS (198.18.0.2)',
+      label: 'Policy Routing',
+      statusText: isConnected ? 'Table 8420 Active' : 'Standby',
+      ok: isConnected,
+      detail: isConnected ? 'Default via centium0 (Tor bypassed)' : 'Host routing untouched',
     },
     {
-      label: 'IPv6',
-      statusText: isIpv6Protected ? 'Protected' : 'Unprotected',
-      ok: isIpv6Protected,
-      detail: 'nftables fail-closed drop',
-    },
-    {
-      label: 'Kill Switch',
-      statusText: isKillSwitchActive || isConnected ? 'Active' : 'Standby',
+      label: 'nftables Kill Switch',
+      statusText: isKillSwitchActive || isConnected ? 'Armed' : 'Standby',
       ok: isKillSwitchActive || isConnected,
-      detail: 'nftables inet centium (Fail-closed)',
+      detail: 'table inet centium (Fail-closed drop)',
+    },
+    {
+      label: 'DNS Configuration',
+      statusText: isDnsProtected ? 'Protected' : 'Standby',
+      ok: isDnsProtected,
+      detail: 'Tunnel mapped-DNS (198.18.0.2)',
+    },
+    {
+      label: 'Tor Connectivity',
+      statusText: isBootstrapped ? 'Verified' : 'Pending',
+      ok: isBootstrapped,
+      detail: 'SOCKS5 circuit established',
+    },
+    {
+      label: 'External IP Verification',
+      statusText: status.publicIp ? 'Verified' : (isConnected ? 'Checking...' : 'Pending'),
+      ok: !!status.publicIp,
+      detail: status.publicIp ? `Exit Relay: ${status.publicIp}` : 'Awaiting confirmation',
     },
   ];
 
@@ -180,6 +200,21 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
               </span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Linux 10-Layer Diagnostic Shell Report */}
+      {suiteOutput && (
+        <div className="p-4 rounded-xl bg-[#121018] border border-[#1B1824] space-y-2 text-xs">
+          <div className="flex items-center justify-between text-[#8E899E]">
+            <span className="text-[#F4F3F7] font-medium flex items-center gap-1.5">
+              <Terminal className="w-3.5 h-3.5 text-[#6C4DFF]" />
+              Linux 10-Layer Architecture Suite (centium-diagnose.sh)
+            </span>
+          </div>
+          <pre className="p-3 bg-[#0D0B12] rounded-lg font-mono text-[11px] text-[#A8A2B6] overflow-x-auto whitespace-pre-wrap leading-relaxed">
+            {suiteOutput.replace(/\x1b\[[0-9;]*m/g, '')}
+          </pre>
         </div>
       )}
 

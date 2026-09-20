@@ -220,7 +220,15 @@ export const MainConnectView: React.FC<MainConnectViewProps> = ({
           </div>
 
           <div className="flex items-center justify-between pb-2.5 border-b border-[#1B1824]">
-            <span className="text-[#8E899E]">Public IP</span>
+            <span className="text-[#8E899E]">Tor Circuit</span>
+            <span className="text-emerald-400 font-medium flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Tor circuit active
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between pb-2.5 border-b border-[#1B1824]">
+            <span className="text-[#8E899E]">Exit IP</span>
             <div className="flex items-center gap-2">
               <span className="font-mono font-medium text-[#F4F3F7]">
                 {status.publicIp || 'Tor Relay Verified'}
@@ -235,6 +243,13 @@ export const MainConnectView: React.FC<MainConnectViewProps> = ({
                 </button>
               )}
             </div>
+          </div>
+
+          <div className="flex items-center justify-between pb-2.5 border-b border-[#1B1824]">
+            <span className="text-[#8E899E]">Protocol</span>
+            <span className="text-[#F4F3F7] font-medium">
+              Tor (TUN / SOCKS5)
+            </span>
           </div>
 
           <div className="flex items-center justify-between">

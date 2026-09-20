@@ -126,11 +126,11 @@ export const PrivacyDashboardView: React.FC<PrivacyDashboardViewProps> = ({
           </div>
           <ArrowDown className="w-3 h-3 text-zinc-500" />
           <div className="w-full text-center py-1 px-3 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/40">
-            Centium Network Daemon (TransPort & DNSPort)
+            TUN-to-SOCKS Bridge (centium0 ➔ SOCKS5 127.0.0.1:9050)
           </div>
           <ArrowDown className="w-3 h-3 text-zinc-500" />
           <div className="w-full text-center py-1 px-3 rounded bg-zinc-800/90 text-zinc-300 border border-zinc-700">
-            Local Tor Process (Layered Encryption)
+            Local Tor Daemon (SOCKS5 127.0.0.1:9050)
           </div>
           <ArrowDown className="w-3 h-3 text-zinc-500" />
           <div className="w-full grid grid-cols-3 gap-1.5 text-[10px] text-center">
@@ -150,12 +150,20 @@ export const PrivacyDashboardView: React.FC<PrivacyDashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-400 flex items-start gap-2">
-          <Server className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-          <span>
-            <strong className="text-zinc-200">Zero Proxying:</strong> Centium backend servers are NEVER in the traffic path.
-            Unlike conventional VPN providers that can inspect and log your unencrypted packets at their centralized data centers, Centium routes directly to Tor onion relays.
-          </span>
+        <div className="space-y-2 text-[11px]">
+          <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-start gap-2">
+            <Server className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+            <span>
+              <strong className="text-zinc-200">Zero Proxying:</strong> No VPS, external VPN servers, or user accounts. All traffic routes through Tor onion relays via local open-source TUN bridge.
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-start gap-2">
+            <Shield className="w-4 h-4 shrink-0 text-blue-400 mt-0.5" />
+            <span>
+              <strong className="text-zinc-200">TCP & UDP Handling:</strong> TCP traffic is routed over the Tor network. Arbitrary UDP is blocked fail-closed to prevent leaks (the Tor protocol only transports TCP streams).
+            </span>
+          </div>
         </div>
       </div>
 

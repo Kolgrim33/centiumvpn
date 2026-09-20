@@ -7,9 +7,11 @@ interface LinuxPackagesModalProps {
 }
 
 export const LinuxPackagesModal: React.FC<LinuxPackagesModalProps> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState<'setup' | 'arch' | 'debian' | 'service' | 'routing' | 'rust'>('setup');
+  const [activeTab, setActiveTab] = useState<'setup' | 'arch' | 'debian' | 'service' | 'hev' | 'network' | 'rust'>('setup');
   const [files, setFiles] = useState<{
     systemd: string;
+    hevService?: string;
+    networkScript?: string;
     routingScript: string;
     archPkgbuild: string;
     debianControl: string;
@@ -28,12 +30,12 @@ export const LinuxPackagesModal: React.FC<LinuxPackagesModalProps> = ({ onBack }
     switch (activeTab) {
       case 'setup':
         return `#!/usr/bin/env bash
-# Centium VPN - Native Linux Desktop Installer
+# Centium VPN - Native Linux Desktop Installer (TUN + Tor SOCKS5 Architecture)
 # Run on your Arch Linux, Ubuntu, Debian, or Fedora desktop:
 
 sudo ./setup-linux.sh
 
-# Or start daemon and app:
+# Starts Tor, builds pinned hev-socks5-tunnel, and arms nftables fail-closed protection
 sudo systemctl enable --now centiumd
 npm start`;
       case 'arch':
@@ -42,8 +44,10 @@ npm start`;
         return files.debianControl;
       case 'service':
         return files.systemd;
-      case 'routing':
-        return files.routingScript;
+      case 'hev':
+        return files.hevService || '';
+      case 'network':
+        return files.networkScript || files.routingScript;
       case 'rust':
         return files.rustDaemon;
     }
@@ -91,10 +95,11 @@ npm start`;
       <div className="flex items-center gap-1 border-b border-[#1B1824] pb-2 overflow-x-auto text-xs">
         {[
           { id: 'setup', label: 'Quick Setup' },
+          { id: 'network', label: 'Network Engine (centium-network.sh)' },
+          { id: 'hev', label: 'Bridge Service (hev-socks5)' },
+          { id: 'service', label: 'Systemd Daemon' },
           { id: 'arch', label: 'Arch (PKGBUILD)' },
           { id: 'debian', label: 'Debian / Ubuntu' },
-          { id: 'service', label: 'Systemd Service' },
-          { id: 'routing', label: 'Routing Script' },
           { id: 'rust', label: 'Rust Core (centiumd)' },
         ].map((tab) => (
           <button

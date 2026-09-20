@@ -55,8 +55,6 @@ const DEFAULT_CONFIG: CentiumConfig = {
   virtualInterface: 'centium0',
   socksPort: 9050,
   controlPort: 9051,
-  dnsPort: 5353,
-  transportPort: 9040,
 };
 
 export default function App() {
@@ -85,12 +83,19 @@ export default function App() {
   // Dynamic status poll interval
   useEffect(() => {
     const isBusy =
+      status.state === 'STARTING_TOR' ||
+      status.state === 'WAITING_FOR_BOOTSTRAP' ||
+      status.state === 'STARTING_TUN' ||
+      status.state === 'STARTING_BRIDGE' ||
+      status.state === 'INSTALLING_ROUTING' ||
+      status.state === 'INSTALLING_KILLSWITCH' ||
+      status.state === 'VERIFYING' ||
       status.state === 'STARTING' ||
       status.state === 'CONNECTING' ||
       status.state === 'DISCONNECTING' ||
       status.state === 'RECONNECTING';
 
-    const intervalMs = isBusy ? 800 : status.state === 'CONNECTED' ? 2000 : 4000;
+    const intervalMs = isBusy ? 600 : status.state === 'CONNECTED' ? 2000 : 4000;
     const timer = setInterval(refreshStatus, intervalMs);
     return () => clearInterval(timer);
   }, [status.state, refreshStatus]);
@@ -100,10 +105,11 @@ export default function App() {
     try {
       setStatus((prev) => ({
         ...prev,
-        state: 'STARTING',
-        statusMessage: 'Starting Tor...',
+        state: 'STARTING_TOR',
+        statusMessage: 'Initializing Tor engine...',
         currentStep: 1,
-        stepDescription: 'Verifying Tor installation and environment',
+        totalSteps: 8,
+        stepDescription: 'Validating environment and generating configuration',
       }));
       await connectVPN();
       await refreshStatus();

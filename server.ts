@@ -74,7 +74,7 @@ async function startServer() {
 
   app.get('/api/diagnostics/suite', (req, res) => {
     const diagScript = path.resolve(process.cwd(), 'linux/centium-diagnose.sh');
-    exec(`"${diagScript}"`, (err, stdout, stderr) => {
+    exec(`bash "${diagScript}"`, (err, stdout, stderr) => {
       res.json({
         success: !err,
         output: stdout || stderr,

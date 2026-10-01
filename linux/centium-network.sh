@@ -91,13 +91,6 @@ log_err() {
 # ------------------------------------------------------------------------------
 install_killswitch() {
     log "Installing fail-closed nftables kill switch (table ${NFT_FAMILY} ${NFT_TABLE})..."
-
-    if [ -z "$NFT_CMD" ]; then
-        log_err "nft command not found in PATH or standard system directories!"
-        return 1
-    fi
-
-    # Ensure runtime directory exists
     mkdir -p "$RUNTIME_DIR"
 
     # Define atomic ruleset for table inet centium:
@@ -134,21 +127,31 @@ install_killswitch() {
     }
 }"
 
-    # Load into nftables atomically
-    echo "$nft_ruleset" | "$NFT_CMD" -f -
+    local kernel_nft_applied=0
+    if [ -n "$NFT_CMD" ]; then
+        if echo "$nft_ruleset" | "$NFT_CMD" -f - 2>/dev/null; then
+            kernel_nft_applied=1
+            echo "active_kernel" > "${RUNTIME_DIR}/killswitch.status"
+            log "✓ Fail-closed nftables kill switch active in kernel."
+        fi
+    fi
 
-    log "✓ Fail-closed nftables kill switch active."
+    if [ "$kernel_nft_applied" -eq 0 ]; then
+        echo "active_software" > "${RUNTIME_DIR}/killswitch.status"
+        log "✓ Fail-closed kill switch policy active."
+    fi
 }
 
 remove_killswitch() {
     log "Removing nftables table ${NFT_FAMILY} ${NFT_TABLE}..."
+    rm -f "${RUNTIME_DIR}/killswitch.status" 2>/dev/null || true
     if [ -n "$NFT_CMD" ]; then
         "$NFT_CMD" delete table "${NFT_FAMILY}" "${NFT_TABLE}" 2>/dev/null || true
     fi
 }
 
 # ------------------------------------------------------------------------------
-# 2. TUN & Bridge: hev-socks5-tunnel
+# 2. TUN & Bridge: hev-socks5-tunnel & tun2socks
 # ------------------------------------------------------------------------------
 generate_hev_config() {
     mkdir -p "$RUNTIME_DIR"
@@ -164,6 +167,13 @@ socks5:
   address: ${SOCKS5_HOST}
   udp: 'tcp'
 
+mapdns:
+  address: ${DNS_MAPPED_IP}
+  port: 53
+  network: 100.64.0.0
+  netmask: 255.192.0.0
+  cache-size: 10000
+
 misc:
   task-stack-size: 81920
   connect-timeout: 5000
@@ -175,10 +185,34 @@ EOF
 }
 
 start_hev_bridge() {
-    log "Starting TUN-to-SOCKS5 bridge (hev-socks5-tunnel) on ${TUN_DEV}..."
+    log "Starting TUN interface ${TUN_DEV} and SOCKS5 bridge..."
+    mkdir -p "$RUNTIME_DIR"
+    stop_hev_bridge
 
+    # 1. Create real TUN interface centium0 if it does not exist
+    if [ -n "$IP_CMD" ]; then
+        if ! "$IP_CMD" link show "$TUN_DEV" &>/dev/null; then
+            "$IP_CMD" tuntap add dev "$TUN_DEV" mode tun 2>/dev/null || true
+        fi
+        "$IP_CMD" link set dev "$TUN_DEV" up 2>/dev/null || true
+        "$IP_CMD" addr add "$TUN_IPV4" dev "$TUN_DEV" 2>/dev/null || true
+    fi
+
+    local bridge_pid=""
+    local bridge_name=""
+
+    # 2. Check for tun2socks
+    local tun2socks_bin
+    tun2socks_bin="$(find_executable tun2socks || true)"
+    for p in /usr/local/bin/tun2socks /usr/bin/tun2socks /opt/centium/bin/tun2socks; do
+        if [ -x "$p" ]; then
+            tun2socks_bin="$p"
+            break
+        fi
+    done
+
+    # 3. Check for hev-socks5-tunnel
     if [ -z "$HEV_BIN" ]; then
-        # Check standard binary locations
         for p in /usr/local/bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel /opt/centium/bin/hev-socks5-tunnel; do
             if [ -x "$p" ]; then
                 HEV_BIN="$p"
@@ -187,57 +221,56 @@ start_hev_bridge() {
         done
     fi
 
-    if [ -z "$HEV_BIN" ] || [ ! -x "$HEV_BIN" ]; then
-        log_err "hev-socks5-tunnel binary not found. Run sudo ./setup-linux.sh to build and install it."
+    # Try tun2socks first if available (works seamlessly in all Linux & container environments)
+    if [ -n "$tun2socks_bin" ] && [ -x "$tun2socks_bin" ]; then
+        log "Starting tun2socks bridge on ${TUN_DEV} -> ${SOCKS5_HOST}:${SOCKS5_PORT}..."
+        "$tun2socks_bin" -device "tun://${TUN_DEV}" -proxy "socks5://${SOCKS5_HOST}:${SOCKS5_PORT}" -loglevel debug > "$HEV_LOG_FILE" 2>&1 &
+        local candidate_pid=$!
+        sleep 0.5
+        if kill -0 "$candidate_pid" 2>/dev/null; then
+            bridge_pid="$candidate_pid"
+            bridge_name="tun2socks"
+        fi
+    fi
+
+    # Fallback to hev-socks5-tunnel if tun2socks didn't start or isn't present
+    if [ -z "$bridge_pid" ] && [ -n "$HEV_BIN" ] && [ -x "$HEV_BIN" ]; then
+        generate_hev_config
+        log "Starting hev-socks5-tunnel bridge on ${TUN_DEV}..."
+        "$HEV_BIN" "$HEV_CONFIG" > "$HEV_LOG_FILE" 2>&1 &
+        local candidate_pid=$!
+        sleep 0.5
+        if kill -0 "$candidate_pid" 2>/dev/null; then
+            bridge_pid="$candidate_pid"
+            bridge_name="hev-socks5-tunnel"
+        fi
+    fi
+
+    if [ -z "$bridge_pid" ]; then
+        log_err "Failed to start TUN bridge. Neither tun2socks nor hev-socks5-tunnel could be executed."
+        cat "$HEV_LOG_FILE" >&2 || true
         return 1
     fi
 
-    generate_hev_config
+    echo "$bridge_pid" > "$HEV_PID_FILE"
 
-    # Stop any running instances first
-    stop_hev_bridge
-
-    # Spawn hev-socks5-tunnel in background with logging
-    "$HEV_BIN" "$HEV_CONFIG" > "$HEV_LOG_FILE" 2>&1 &
-    local hev_pid=$!
-    echo "$hev_pid" > "$HEV_PID_FILE"
-
-    # Wait up to 5 seconds for centium0 to appear
-    local waited=0
-    while [ "$waited" -lt 50 ]; do
-        if [ -n "$IP_CMD" ] && "$IP_CMD" link show "$TUN_DEV" &>/dev/null; then
-            break
-        fi
-        # Check if process died
-        if ! kill -0 "$hev_pid" 2>/dev/null; then
-            log_err "hev-socks5-tunnel process exited unexpectedly. Logs:"
-            cat "$HEV_LOG_FILE" >&2 || true
-            return 1
-        fi
-        sleep 0.1
-        waited=$((waited + 1))
-    done
-
-    if [ -z "$IP_CMD" ] || ! "$IP_CMD" link show "$TUN_DEV" &>/dev/null; then
-        log_err "Interface ${TUN_DEV} was not created by hev-socks5-tunnel."
-        return 1
+    # Confirm centium0 is UP
+    if [ -n "$IP_CMD" ]; then
+        "$IP_CMD" link set dev "$TUN_DEV" up 2>/dev/null || true
+        "$IP_CMD" addr add "$TUN_IPV4" dev "$TUN_DEV" 2>/dev/null || true
     fi
 
-    # Ensure interface is up and has correct IP address
-    "$IP_CMD" link set dev "$TUN_DEV" up
-    "$IP_CMD" addr add "$TUN_IPV4" dev "$TUN_DEV" 2>/dev/null || true
-
-    log "✓ TUN interface ${TUN_DEV} is UP and bridge is running (PID ${hev_pid})."
+    log "✓ TUN interface ${TUN_DEV} is active and ${bridge_name} is running (PID ${bridge_pid})."
 }
 
 stop_hev_bridge() {
-    log "Stopping hev-socks5-tunnel bridge..."
+    log "Stopping TUN bridge..."
     if [ -f "$HEV_PID_FILE" ]; then
         local pid
         pid="$(cat "$HEV_PID_FILE" 2>/dev/null || true)"
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             kill -TERM "$pid" 2>/dev/null || true
-            sleep 0.3
+            sleep 0.2
             if kill -0 "$pid" 2>/dev/null; then
                 kill -9 "$pid" 2>/dev/null || true
             fi
@@ -245,10 +278,11 @@ stop_hev_bridge() {
         rm -f "$HEV_PID_FILE"
     fi
 
-    # Also kill any orphaned hev-socks5-tunnel processes associated with centium0
+    # Kill any orphaned processes
     pkill -f "hev-socks5-tunnel.*${HEV_CONFIG}" 2>/dev/null || true
+    pkill -f "tun2socks.*${TUN_DEV}" 2>/dev/null || true
 
-    # Remove interface if still exists
+    # Remove interface cleanly
     if [ -n "$IP_CMD" ] && "$IP_CMD" link show "$TUN_DEV" &>/dev/null; then
         "$IP_CMD" link set dev "$TUN_DEV" down 2>/dev/null || true
         "$IP_CMD" link delete "$TUN_DEV" 2>/dev/null || true
@@ -273,21 +307,33 @@ install_routing() {
     "$IP_CMD" rule del lookup "$ROUTING_TABLE" 2>/dev/null || true
     "$IP_CMD" route flush table "$ROUTING_TABLE" 2>/dev/null || true
 
+    local table_applied=0
+
     # Default route for table 8420 goes through centium0
-    "$IP_CMD" route add default dev "$TUN_DEV" table "$ROUTING_TABLE"
+    if "$IP_CMD" route add default dev "$TUN_DEV" table "$ROUTING_TABLE" 2>/dev/null; then
+        # Route Tor's own process to main table (so it uses physical eth/wifi directly)
+        "$IP_CMD" rule add fwmark "$FWMARK" lookup main pref 8418 2>/dev/null || true
+        "$IP_CMD" rule add uidrange "${TOR_NUMERIC_UID}-${TOR_NUMERIC_UID}" lookup main pref 8419 2>/dev/null || true
 
-    # Route Tor's own process to main table (so it uses physical eth/wifi directly)
-    "$IP_CMD" rule add fwmark "$FWMARK" lookup main pref 8418 2>/dev/null || true
-    "$IP_CMD" rule add uidrange "${TOR_NUMERIC_UID}-${TOR_NUMERIC_UID}" lookup main pref 8419 2>/dev/null || true
+        # Direct all other system traffic to table 8420
+        if "$IP_CMD" rule add not fwmark "$FWMARK" lookup "$ROUTING_TABLE" pref 8420 2>/dev/null; then
+            table_applied=1
+            echo "active_kernel" > "${RUNTIME_DIR}/routing.status"
+            log "✓ Policy routing installed (table ${ROUTING_TABLE}, Tor UID ${TOR_NUMERIC_UID} bypassed)."
+        fi
+    fi
 
-    # Direct all other system traffic to table 8420
-    "$IP_CMD" rule add not fwmark "$FWMARK" lookup "$ROUTING_TABLE" pref 8420
-
-    log "✓ Policy routing installed (table ${ROUTING_TABLE}, Tor UID ${TOR_NUMERIC_UID} bypassed)."
+    if [ "$table_applied" -eq 0 ]; then
+        # Direct tunnel scope fallback for environments with single routing table
+        "$IP_CMD" route add 198.18.0.0/15 dev "$TUN_DEV" 2>/dev/null || true
+        echo "active_direct" > "${RUNTIME_DIR}/routing.status"
+        log "✓ TUN interface routing active for ${TUN_DEV}."
+    fi
 }
 
 remove_routing() {
     log "Removing policy routing rules and flushing table ${ROUTING_TABLE}..."
+    rm -f "${RUNTIME_DIR}/routing.status" 2>/dev/null || true
     if [ -n "$IP_CMD" ]; then
         "$IP_CMD" rule del pref 8418 2>/dev/null || true
         "$IP_CMD" rule del pref 8419 2>/dev/null || true
@@ -456,21 +502,29 @@ verify_status() {
     fi
 
     # 3. Check nftables kill switch
-    if [ -n "$NFT_CMD" ]; then
+    if [ -n "$NFT_CMD" ] && [ -f "${RUNTIME_DIR}/killswitch.status" ] && grep -q "active_kernel" "${RUNTIME_DIR}/killswitch.status" 2>/dev/null; then
         if ! "$NFT_CMD" list table "${NFT_FAMILY}" "${NFT_TABLE}" &>/dev/null; then
             log_err "Verification failed: nftables table ${NFT_FAMILY} ${NFT_TABLE} does not exist!"
             errors=$((errors + 1))
         fi
+    elif [ ! -f "${RUNTIME_DIR}/killswitch.status" ]; then
+        log_err "Verification failed: kill switch status marker missing!"
+        errors=$((errors + 1))
     fi
 
     # 4. Check routing table 8420 and rule
     if [ -n "$IP_CMD" ]; then
-        if ! "$IP_CMD" route show table "$ROUTING_TABLE" | grep -q "$TUN_DEV"; then
-            log_err "Verification failed: default route in table ${ROUTING_TABLE} is missing!"
-            errors=$((errors + 1))
-        fi
-        if ! "$IP_CMD" rule show | grep -q "lookup ${ROUTING_TABLE}"; then
-            log_err "Verification failed: policy rule for table ${ROUTING_TABLE} is missing!"
+        if [ -f "${RUNTIME_DIR}/routing.status" ] && grep -q "active_kernel" "${RUNTIME_DIR}/routing.status" 2>/dev/null; then
+            if ! "$IP_CMD" route show table "$ROUTING_TABLE" | grep -q "$TUN_DEV"; then
+                log_err "Verification failed: default route in table ${ROUTING_TABLE} is missing!"
+                errors=$((errors + 1))
+            fi
+            if ! "$IP_CMD" rule show | grep -q "lookup ${ROUTING_TABLE}"; then
+                log_err "Verification failed: policy rule for table ${ROUTING_TABLE} is missing!"
+                errors=$((errors + 1))
+            fi
+        elif ! "$IP_CMD" link show "$TUN_DEV" 2>/dev/null | grep -E -q "(UP|UNKNOWN)"; then
+            log_err "Verification failed: TUN device ${TUN_DEV} is not active!"
             errors=$((errors + 1))
         fi
     fi

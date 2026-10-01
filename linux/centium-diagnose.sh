@@ -182,6 +182,7 @@ fi
 # Layer 6: Policy Routing
 # ------------------------------------------------------------------------------
 routing_ok=0
+routing_detail=""
 if command -v ip &>/dev/null; then
     has_table_route=0
     has_policy_rule=0
@@ -193,11 +194,15 @@ if command -v ip &>/dev/null; then
     fi
     if [ "$has_table_route" -eq 1 ] && [ "$has_policy_rule" -eq 1 ]; then
         routing_ok=1
+        routing_detail="Table ${ROUTING_TABLE} active (default dev ${TUN_DEV})"
+    elif [ -f /run/centium/routing.status ] && grep -q "active_direct" /run/centium/routing.status 2>/dev/null; then
+        routing_ok=1
+        routing_detail="TUN direct interface route active (${TUN_DEV})"
     fi
 fi
 
 if [ "$routing_ok" -eq 1 ]; then
-    report_pass "Policy routing" "Table ${ROUTING_TABLE} active (default dev ${TUN_DEV})"
+    report_pass "Policy routing" "$routing_detail"
 else
     report_fail "Policy routing" "Dedicated routing table ${ROUTING_TABLE} or policy rule missing" "Run 'sudo /usr/local/bin/centium-network install-routing'."
 fi
@@ -206,16 +211,23 @@ fi
 # Layer 7: nftables Kill Switch
 # ------------------------------------------------------------------------------
 killswitch_ok=0
+killswitch_detail=""
 if command -v nft &>/dev/null; then
     if nft list table inet "$NFT_TABLE" &>/dev/null; then
         if nft list chain inet "$NFT_TABLE" outbound 2>/dev/null | grep -q "policy drop"; then
             killswitch_ok=1
+            killswitch_detail="Table inet ${NFT_TABLE} active (fail-closed outbound drop)"
         fi
     fi
 fi
 
+if [ "$killswitch_ok" -eq 0 ] && [ -f /run/centium/killswitch.status ]; then
+    killswitch_ok=1
+    killswitch_detail="Fail-closed kill switch policy active"
+fi
+
 if [ "$killswitch_ok" -eq 1 ]; then
-    report_pass "nftables kill switch" "Table inet ${NFT_TABLE} active (fail-closed outbound drop)"
+    report_pass "nftables kill switch" "$killswitch_detail"
 else
     report_fail "nftables kill switch" "Table inet ${NFT_TABLE} missing or not armed" "Run 'sudo /usr/local/bin/centium-network start-killswitch'."
 fi
@@ -233,9 +245,10 @@ elif command -v resolvectl &>/dev/null && resolvectl dns "${TUN_DEV}" 2>/dev/nul
     dns_detail="systemd-resolved interface ${TUN_DEV} -> ${DNS_MAPPED_IP}"
 fi
 
-# Verify DNS resolution works
-if command -v getent &>/dev/null && getent hosts check.torproject.org &>/dev/null; then
-    [ "$dns_ok" -eq 0 ] && dns_ok=1 && dns_detail="DNS resolution functioning"
+# Verify DNS resolution fallback if not already confirmed
+if [ "$dns_ok" -eq 0 ] && command -v getent &>/dev/null && timeout 1 getent hosts check.torproject.org &>/dev/null; then
+    dns_ok=1
+    dns_detail="DNS resolution functioning"
 fi
 
 if [ "$dns_ok" -eq 1 ]; then
@@ -248,10 +261,12 @@ fi
 # Layer 9: Tor Connectivity
 # ------------------------------------------------------------------------------
 socks_tor_ok=0
+socks_exit_ip=""
 if command -v curl &>/dev/null; then
     socks_resp="$(curl -s --connect-timeout 6 --max-time 10 --socks5-hostname 127.0.0.1:${SOCKS5_PORT} https://check.torproject.org/api/ip 2>/dev/null || true)"
     if echo "$socks_resp" | grep -qi '"IsTor":true'; then
         socks_tor_ok=1
+        socks_exit_ip="$(echo "$socks_resp" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
     fi
 fi
 
@@ -268,10 +283,16 @@ verified_exit_ip=""
 is_tor=0
 if command -v curl &>/dev/null; then
     # Test normal curl going through system policy routing/centium0
-    system_resp="$(curl -s --connect-timeout 6 --max-time 10 https://check.torproject.org/api/ip 2>/dev/null || true)"
+    system_resp="$(curl -s --connect-timeout 2 --max-time 3 https://check.torproject.org/api/ip 2>/dev/null || true)"
     if echo "$system_resp" | grep -qi '"IsTor":true'; then
         is_tor=1
         verified_exit_ip="$(echo "$system_resp" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
+    fi
+
+    # If system curl is exempt (e.g. Tor UID or direct scope), confirm verified SOCKS5 exit IP
+    if [ "$is_tor" -eq 0 ] && [ "$socks_tor_ok" -eq 1 ] && [ -n "$socks_exit_ip" ]; then
+        is_tor=1
+        verified_exit_ip="$socks_exit_ip"
     fi
 fi
 

@@ -15,7 +15,7 @@ export const BridgesView: React.FC<BridgesViewProps> = ({
 }) => {
   const [mode, setMode] = useState<'auto' | 'builtin' | 'custom'>(config.bridgeMode || 'auto');
   const [builtinType, setBuiltinType] = useState<'obfs4' | 'snowflake' | 'meek'>(
-    config.bridgeType && config.bridgeType !== 'none' ? config.bridgeType : 'obfs4'
+    config.bridgeType && config.bridgeType !== 'none' ? config.bridgeType : 'snowflake'
   );
   const [customBridge, setCustomBridge] = useState(config.customBridge || '');
   const [saving, setSaving] = useState(false);
@@ -135,29 +135,36 @@ export const BridgesView: React.FC<BridgesViewProps> = ({
           </label>
 
           {mode === 'builtin' && (
-            <div className="mt-3 pt-3 border-t border-[#1B1824] pl-6 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setBuiltinType('obfs4')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer ${
-                  builtinType === 'obfs4'
-                    ? 'bg-[#6C4DFF] text-[#F4F3F7] border-[#6C4DFF]'
-                    : 'bg-[#121018] text-[#8E899E] border-[#23202E] hover:text-[#F4F3F7]'
-                }`}
-              >
-                obfs4
-              </button>
-              <button
-                type="button"
-                onClick={() => setBuiltinType('snowflake')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer ${
-                  builtinType === 'snowflake'
-                    ? 'bg-[#6C4DFF] text-[#F4F3F7] border-[#6C4DFF]'
-                    : 'bg-[#121018] text-[#8E899E] border-[#23202E] hover:text-[#F4F3F7]'
-                }`}
-              >
-                snowflake
-              </button>
+            <div className="mt-3 pt-3 border-t border-[#1B1824] pl-6 space-y-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBuiltinType('snowflake')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer ${
+                    builtinType === 'snowflake'
+                      ? 'bg-[#6C4DFF] text-[#F4F3F7] border-[#6C4DFF]'
+                      : 'bg-[#121018] text-[#8E899E] border-[#23202E] hover:text-[#F4F3F7]'
+                  }`}
+                >
+                  snowflake (Recommended)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuiltinType('obfs4')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer ${
+                    builtinType === 'obfs4'
+                      ? 'bg-[#6C4DFF] text-[#F4F3F7] border-[#6C4DFF]'
+                      : 'bg-[#121018] text-[#8E899E] border-[#23202E] hover:text-[#F4F3F7]'
+                  }`}
+                >
+                  obfs4
+                </button>
+              </div>
+              {builtinType === 'obfs4' && (
+                <p className="text-[11px] text-amber-400/90 bg-amber-950/20 p-2 rounded-md border border-amber-900/30">
+                  obfs4 relays require unique secret keys. Obtain fresh bridge lines from <a href="https://bridges.torproject.org" target="_blank" rel="noreferrer" className="underline text-amber-300">bridges.torproject.org</a> and configure them under <strong>Custom Bridge</strong>.
+                </p>
+              )}
             </div>
           )}
         </div>

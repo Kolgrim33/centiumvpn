@@ -15,11 +15,20 @@ import {
   DEBIAN_CONTROL,
   RUST_DAEMON_SOURCE,
 } from './server/linuxIntegration.ts';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Block DNS rebinding attacks: strictly permit localhost / 127.0.0.1
+  app.use((req, res, next) => {
+    const host = req.headers.host;
+    if (host && !/^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(host)) {
+      return res.status(403).json({ error: 'Access denied: invalid Host header' });
+    }
+    next();
+  });
 
   app.use(express.json());
 
@@ -81,7 +90,7 @@ async function startServer() {
 
   app.get('/api/diagnostics/suite', (req, res) => {
     const diagScript = path.resolve(process.cwd(), 'linux/centium-diagnose.sh');
-    exec(`bash "${diagScript}"`, (err, stdout, stderr) => {
+    execFile('bash', [diagScript], (err, stdout, stderr) => {
       res.json({
         success: !err,
         output: stdout || stderr,

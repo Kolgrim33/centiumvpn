@@ -1,4 +1,4 @@
-import { ChildProcess, spawn, exec, execSync } from 'child_process';
+import { ChildProcess, spawn, exec, execSync, execFile, execFileSync } from 'child_process';
 import fs from 'fs';
 import net from 'net';
 import path from 'path';
@@ -26,6 +26,7 @@ export class TorManager {
   private bytesSent = 0;
   private logs: string[] = [];
   private maxLogs = 200;
+  private torOutputTail: string[] = [];
   private torrcPath = '/run/centium/centium_torrc';
   private dataDir = '/var/lib/centium/tor';
   private pidFile = '/run/centium/tor.pid';
@@ -240,7 +241,60 @@ export class TorManager {
   }
 
   public updateConfig(newConfig: Partial<CentiumConfig>) {
-    this.config = { ...this.config, ...newConfig };
+    if (!newConfig || typeof newConfig !== 'object') return;
+
+    // Validate exitLocation: auto or 2-letter ISO country code
+    if (typeof newConfig.exitLocation === 'string') {
+      const cleanLoc = newConfig.exitLocation.trim();
+      if (/^(auto|[a-z]{2})$/i.test(cleanLoc)) {
+        this.config.exitLocation = cleanLoc.toLowerCase();
+      }
+    }
+
+    // Validate bridgeMode
+    if (typeof newConfig.bridgeMode === 'string') {
+      if (['auto', 'builtin', 'custom', 'none'].includes(newConfig.bridgeMode)) {
+        this.config.bridgeMode = newConfig.bridgeMode as any;
+      }
+    }
+
+    // Validate bridgeType
+    if (typeof newConfig.bridgeType === 'string') {
+      if (['none', 'obfs4', 'snowflake', 'meek'].includes(newConfig.bridgeType)) {
+        this.config.bridgeType = newConfig.bridgeType as any;
+      }
+    }
+
+    // Validate customBridge: restrict to safe characters [a-zA-Z0-9.:=+/ -] and no newline injection
+    if (typeof newConfig.customBridge === 'string') {
+      const raw = newConfig.customBridge;
+      const sanitizedLines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const validLines = sanitizedLines.filter((line) => /^[a-zA-Z0-9.:=+\/_ -]+$/.test(line));
+      this.config.customBridge = validLines.join('\n');
+    }
+
+    // Validate ports: strictly integers within [1024, 65535]
+    if (typeof newConfig.socksPort === 'number' && Number.isInteger(newConfig.socksPort)) {
+      if (newConfig.socksPort >= 1024 && newConfig.socksPort <= 65535) {
+        this.config.socksPort = newConfig.socksPort;
+      }
+    }
+    if (typeof newConfig.controlPort === 'number' && Number.isInteger(newConfig.controlPort)) {
+      if (newConfig.controlPort >= 1024 && newConfig.controlPort <= 65535) {
+        this.config.controlPort = newConfig.controlPort;
+      }
+    }
+
+    // Booleans
+    if (typeof newConfig.killSwitch === 'boolean') this.config.killSwitch = newConfig.killSwitch;
+    if (typeof newConfig.blockIpv6 === 'boolean') this.config.blockIpv6 = newConfig.blockIpv6;
+    if (typeof newConfig.autoConnect === 'boolean') this.config.autoConnect = newConfig.autoConnect;
+    if (typeof newConfig.startWithSystem === 'boolean') this.config.startWithSystem = newConfig.startWithSystem;
+    if (typeof newConfig.dnsProtection === 'boolean') this.config.dnsProtection = newConfig.dnsProtection;
+
+    // Hard-code virtualInterface to centium0 to prevent any command injection
+    this.config.virtualInterface = 'centium0';
+
     this.addLog(`[Config] Configuration updated. Exit: ${this.config.exitLocation}, KillSwitch: ${this.config.killSwitch}`);
   }
 
@@ -264,27 +318,55 @@ export class TorManager {
     }
 
     if (this.config.bridgeMode === 'builtin') {
-      const snowflakeClient = ['/usr/bin/snowflake-client', '/usr/local/bin/snowflake-client'].find((p) => fs.existsSync(p));
-      const obfs4proxy = ['/usr/bin/obfs4proxy', '/usr/local/bin/obfs4proxy'].find((p) => fs.existsSync(p));
-
-      if (this.config.bridgeType === 'snowflake' && snowflakeClient) {
+      if (this.config.bridgeType === 'snowflake') {
+        const snowflakeClient = ['/usr/bin/snowflake-client', '/usr/local/bin/snowflake-client'].find((p) => fs.existsSync(p));
+        if (!snowflakeClient) {
+          throw new Error('snowflake-client binary not found. Please install snowflake-client or provide custom bridge lines.');
+        }
         lines.push(`UseBridges 1`);
-        lines.push(`ClientTransportPlugin snowflake exec ${snowflakeClient}`);
-        lines.push(`Bridge snowflake 192.0.2.3:1 2B280B23E1107BB62ABFC40DDCC816AE1BF03482 url=https://snowflake-broker.torproject.net.global.prod.fastly.net/ front=cdn.sstatic.net ice=stun:stun.l.google.com:19302,stun:stun.voip.blackberry.com:3478 utls-imitate=hellorandomizedalpn`);
-        lines.push(`Bridge snowflake 192.0.2.4:1 8838EA4445A2D3D96CF7BA7269F860286E2130AD url=https://snowflake-broker.torproject.net.global.prod.fastly.net/ front=cdn.sstatic.net ice=stun:stun.l.google.com:19302,stun:stun.voip.blackberry.com:3478 utls-imitate=hellorandomizedalpn`);
-      } else if (this.config.bridgeType === 'obfs4' && obfs4proxy) {
+        lines.push(`ClientTransportPlugin snowflake exec ${snowflakeClient} -url https://snowflake-broker.torproject.net.global.prod.fastly.net/ -front cdn.sstatic.net -ice stun:stun.l.google.com:19302,stun:stun.voip.blackberry.com:3478 -utls-imitate hellorandomizedalpn`);
+        lines.push(`Bridge snowflake 192.0.2.3:1 2B280B23E1107BB62ABFC40DDCC816AE1BF03482`);
+        lines.push(`Bridge snowflake 192.0.2.4:1 8838EA4445A2D3D96CF7BA7269F860286E2130AD`);
+      } else if (this.config.bridgeType === 'obfs4') {
+        // Builtin obfs4 preset with fake hardcoded certs refuses to start. Require user to paste valid bridges.
+        const customBridges = (this.config.customBridge || '').trim();
+        if (!customBridges) {
+          throw new Error('obfs4 bridges require real bridge lines from https://bridges.torproject.org. Please paste them into Custom Bridge settings.');
+        }
+        const obfs4proxy = ['/usr/bin/obfs4proxy', '/usr/local/bin/obfs4proxy'].find((p) => fs.existsSync(p));
+        if (!obfs4proxy) {
+          throw new Error('obfs4proxy binary not found. Please install obfs4proxy.');
+        }
         lines.push(`UseBridges 1`);
         lines.push(`ClientTransportPlugin obfs4 exec ${obfs4proxy}`);
-        lines.push(`Bridge obfs4 192.95.36.142:443 CDF2E852BF539B82BD10E27E9115A31734E378C2 cert=qqlpmJuAYDbMoaBq8g9q+035qQxG8G0hPik+a2xX76F438vU9gA2Qc2oP9wG2v+1v+2Q iat-mode=0`);
-        lines.push(`Bridge obfs4 193.23.244.244:443 3A48C8B56BC795A44B27CE4780655E9E4F5BB601 cert=NGk4y2iR6gOaNqJcM2lY6zI3hQ4N7v9mB5xR2wP1aC3dE4fG5hI6jK7lM8nO9pQ iat-mode=0`);
-      } else if (this.config.bridgeType !== 'none') {
-        this.addLog(`[Config Note] Bridge pluggable transport binary for ${this.config.bridgeType} not found; connecting directly to Tor relays.`);
+        const bridgeLines = customBridges.split('\n').map((l) => l.trim()).filter(Boolean);
+        for (const b of bridgeLines) {
+          const cleanB = b.startsWith('Bridge ') ? b.slice(7).trim() : b;
+          lines.push(`Bridge ${cleanB}`);
+        }
       }
-    } else if (this.config.bridgeMode === 'custom' && this.config.customBridge) {
+    } else if (this.config.bridgeMode === 'custom') {
+      const customBridges = (this.config.customBridge || '').trim();
+      if (!customBridges) {
+        throw new Error('Custom bridge mode enabled, but no bridge lines were provided. Please paste bridges from https://bridges.torproject.org.');
+      }
       lines.push(`UseBridges 1`);
-      const bridgeLines = this.config.customBridge.split('\n').map((l) => l.trim()).filter(Boolean);
+      if (customBridges.includes('obfs4')) {
+        const obfs4proxy = ['/usr/bin/obfs4proxy', '/usr/local/bin/obfs4proxy'].find((p) => fs.existsSync(p));
+        if (obfs4proxy) {
+          lines.push(`ClientTransportPlugin obfs4 exec ${obfs4proxy}`);
+        }
+      }
+      if (customBridges.includes('snowflake')) {
+        const snowflakeClient = ['/usr/bin/snowflake-client', '/usr/local/bin/snowflake-client'].find((p) => fs.existsSync(p));
+        if (snowflakeClient) {
+          lines.push(`ClientTransportPlugin snowflake exec ${snowflakeClient} -url https://snowflake-broker.torproject.net.global.prod.fastly.net/ -front cdn.sstatic.net -ice stun:stun.l.google.com:19302,stun:stun.voip.blackberry.com:3478 -utls-imitate hellorandomizedalpn`);
+        }
+      }
+      const bridgeLines = customBridges.split('\n').map((l) => l.trim()).filter(Boolean);
       for (const b of bridgeLines) {
-        lines.push(`Bridge ${b}`);
+        const cleanB = b.startsWith('Bridge ') ? b.slice(7).trim() : b;
+        lines.push(`Bridge ${cleanB}`);
       }
     }
 
@@ -317,7 +399,7 @@ export class TorManager {
 
     // 3. Only kill processes explicitly matching Centium's torrc path
     try {
-      execSync('pkill -9 -f "centium_torrc" 2>/dev/null || true');
+      execFileSync('pkill', ['-9', '-f', 'centium_torrc'], { stdio: 'ignore' });
     } catch {}
   }
 
@@ -381,6 +463,13 @@ export class TorManager {
         const text = data.toString();
         const lines = text.split('\n').filter(Boolean);
         for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) {
+            this.torOutputTail.push(trimmed);
+            if (this.torOutputTail.length > 8) {
+              this.torOutputTail.shift();
+            }
+          }
           this.parseTorLog(line);
         }
         if (!hasSpawned) {
@@ -393,7 +482,14 @@ export class TorManager {
         const text = data.toString();
         const lines = text.split('\n').filter(Boolean);
         for (const line of lines) {
-          this.addLog(`[Tor stderr] ${line.trim()}`);
+          const trimmed = line.trim();
+          if (trimmed) {
+            this.torOutputTail.push(trimmed);
+            if (this.torOutputTail.length > 8) {
+              this.torOutputTail.shift();
+            }
+            this.addLog(`[Tor stderr] ${trimmed}`);
+          }
         }
       });
 
@@ -447,7 +543,8 @@ export class TorManager {
         throw new Error(`Tor circuit bootstrapping timed out after ${timeoutMs / 1000}s (reached ${this.bootstrapPercent}%). Check network connectivity.`);
       }
       if (this.torExitedPrematurely) {
-        throw new Error(`Tor process terminated unexpectedly during bootstrap (code: ${this.lastExitCode})`);
+        const tail = this.torOutputTail.length > 0 ? `:\n${this.torOutputTail.join('\n')}` : '';
+        throw new Error(`Tor process terminated unexpectedly during bootstrap (code: ${this.lastExitCode || 'unknown'})${tail}`);
       }
       await this.sleep(250);
     }
@@ -467,10 +564,11 @@ export class TorManager {
   }
 
   private async handleUnexpectedTorExit(code: number | null, signal: string | null) {
+    const tail = this.torOutputTail.length > 0 ? `:\n${this.torOutputTail.join('\n')}` : '';
     this.addLog(`[Alert] Tor terminated unexpectedly (Code: ${code}, Signal: ${signal}). Triggering fail-closed network reset...`);
     this.state = 'ERROR';
     this.statusMessage = 'Tor process crashed';
-    this.errorMessage = `Tor daemon exited prematurely with code ${code}`;
+    this.errorMessage = `Tor daemon exited prematurely with code ${code}${tail}`;
     await this.cleanupOnFailure();
   }
 
@@ -537,10 +635,10 @@ export class TorManager {
 
     // 4. Interface centium0 exists
     try {
-      execSync(`ip link show ${this.config.virtualInterface}`);
-      this.addLog(`[Audit] ✓ Interface ${this.config.virtualInterface} exists and is active.`);
+      execFileSync('ip', ['link', 'show', 'centium0'], { stdio: ['ignore', 'pipe', 'ignore'] });
+      this.addLog(`[Audit] ✓ Interface centium0 exists and is active.`);
     } catch {
-      throw new Error(`Verification failed: Virtual TUN device ${this.config.virtualInterface} does not exist.`);
+      throw new Error(`Verification failed: Virtual TUN device centium0 does not exist.`);
     }
 
     // 5. hev-socks5-tunnel process is running
@@ -559,8 +657,8 @@ export class TorManager {
 
     // 6. Policy routing table 8420 exists
     try {
-      const routes = execSync('ip route show table 8420 2>/dev/null').toString();
-      if (routes.includes(this.config.virtualInterface)) {
+      const routes = execFileSync('ip', ['route', 'show', 'table', '8420'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+      if (routes.includes('centium0')) {
         this.addLog('[Audit] ✓ Policy routing table 8420 verified with default route via centium0.');
       } else if (fs.existsSync('/run/centium/routing.status')) {
         this.addLog('[Audit] ✓ TUN interface routing verified active.');
@@ -577,7 +675,10 @@ export class TorManager {
 
     // 7. nftables kill switch exists
     try {
-      const nftOut = execSync('sudo nft list table inet centium 2>/dev/null').toString();
+      const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+      const nftOut = isRoot
+        ? execFileSync('nft', ['list', 'table', 'inet', 'centium'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString()
+        : execFileSync('sudo', ['nft', 'list', 'table', 'inet', 'centium'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
       if (nftOut.includes('chain outbound') && nftOut.includes('policy drop')) {
         this.addLog('[Audit] ✓ Fail-closed nftables kill switch verified in kernel.');
       } else if (fs.existsSync('/run/centium/killswitch.status')) {
@@ -619,17 +720,25 @@ export class TorManager {
   // Connect Workflow: Strict State Machine
   // ---------------------------------------------------------------------------
   public async connect(): Promise<boolean> {
-    if (this.isConnecting) {
+    if (typeof process.getuid === 'function' && process.getuid() !== 0) {
+      const msg = 'Centium core daemon must run as root. Run via sudo systemctl start centiumd.';
+      this.errorMessage = msg;
+      this.addLog(`[Root Check Error] ${msg}`);
+      throw new Error(msg);
+    }
+
+    if (this.state !== 'DISCONNECTED' && this.state !== 'ERROR') {
+      if (this.state === 'CONNECTED') {
+        this.addLog('[Connect] Already connected');
+        return true;
+      }
       this.addLog('[Connect] Connection sequence already in progress, ignoring duplicate connect call.');
       return false;
-    }
-    if (this.state === 'CONNECTED') {
-      this.addLog('[Connect] Already connected');
-      return true;
     }
 
     this.isConnecting = true;
     this.bootstrapPercent = 0; // Clear any stale bootstrap progress
+    this.torOutputTail = []; // Clear any stale Tor output
     this.totalSteps = 8;
     this.currentStep = 1;
     this.errorMessage = null;
@@ -810,8 +919,7 @@ export class TorManager {
     // This confirms that system traffic routes through centium0 / policy routing table 8420
     const checkDirect = (): Promise<{ ip: string; isTor: boolean } | null> => {
       return new Promise((resolve) => {
-        const cmd = 'curl -s --connect-timeout 8 --max-time 12 https://check.torproject.org/api/ip';
-        exec(cmd, (err, stdout) => {
+        execFile('curl', ['-s', '--connect-timeout', '8', '--max-time', '12', 'https://check.torproject.org/api/ip'], (err, stdout) => {
           if (!err && stdout) {
             try {
               const data = JSON.parse(stdout);
@@ -828,8 +936,7 @@ export class TorManager {
     // 2. Secondary check: test through Tor SOCKS5 port
     const checkSocks = (): Promise<{ ip: string; isTor: boolean } | null> => {
       return new Promise((resolve) => {
-        const cmd = `curl -s --connect-timeout 8 --max-time 12 --socks5-hostname 127.0.0.1:${this.config.socksPort} https://check.torproject.org/api/ip`;
-        exec(cmd, (err, stdout) => {
+        execFile('curl', ['-s', '--connect-timeout', '8', '--max-time', '12', '--socks5-hostname', `127.0.0.1:${this.config.socksPort}`, 'https://check.torproject.org/api/ip'], (err, stdout) => {
           if (!err && stdout) {
             try {
               const data = JSON.parse(stdout);
@@ -846,8 +953,7 @@ export class TorManager {
     // 3. Fallback IP check: only accept if verified against Tor Onionoo directory
     const checkOnionoo = (ip: string): Promise<boolean> => {
       return new Promise((resolve) => {
-        const cmd = `curl -s --connect-timeout 6 --socks5-hostname 127.0.0.1:${this.config.socksPort} "https://onionoo.torproject.org/details?search=${ip}&type=relay"`;
-        exec(cmd, (err, stdout) => {
+        execFile('curl', ['-s', '--connect-timeout', '6', '--socks5-hostname', `127.0.0.1:${this.config.socksPort}`, `https://onionoo.torproject.org/details?search=${encodeURIComponent(ip)}&type=relay`], (err, stdout) => {
           if (!err && stdout) {
             try {
               const data = JSON.parse(stdout);
@@ -872,8 +978,7 @@ export class TorManager {
     if (!result) {
       // Fallback query to icanhazip, but strictly require Tor verification via Onionoo
       const fallbackIp = await new Promise<string | null>((resolve) => {
-        const cmd = `curl -s --connect-timeout 6 --socks5-hostname 127.0.0.1:${this.config.socksPort} https://icanhazip.com`;
-        exec(cmd, (err, stdout) => {
+        execFile('curl', ['-s', '--connect-timeout', '6', '--socks5-hostname', `127.0.0.1:${this.config.socksPort}`, 'https://icanhazip.com'], (err, stdout) => {
           if (!err && stdout && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(stdout.trim())) {
             resolve(stdout.trim());
           } else {
@@ -929,8 +1034,7 @@ export class TorManager {
     // Query real IP geolocation service via Tor SOCKS proxy
     try {
       const geoResult = await new Promise<{ name: string; code: string } | null>((resolve) => {
-        const cmd = `curl -s --connect-timeout 5 --socks5-hostname 127.0.0.1:${this.config.socksPort} "https://ipwho.is/${ip}"`;
-        exec(cmd, (err, stdout) => {
+        execFile('curl', ['-s', '--connect-timeout', '5', '--socks5-hostname', `127.0.0.1:${this.config.socksPort}`, `https://ipwho.is/${encodeURIComponent(ip)}`], (err, stdout) => {
           if (!err && stdout) {
             try {
               const d = JSON.parse(stdout);
@@ -1251,7 +1355,7 @@ export class TorManager {
       }
     }
     try {
-      execSync('pgrep -f "hev-socks5-tunnel|tun2socks" 2>/dev/null');
+      execFileSync('pgrep', ['-f', 'hev-socks5-tunnel|tun2socks'], { stdio: 'ignore' });
       return true;
     } catch {
       return false;
@@ -1260,7 +1364,7 @@ export class TorManager {
 
   private checkTunInterfaceExists(): boolean {
     try {
-      execSync(`ip link show ${this.config.virtualInterface} 2>/dev/null`);
+      execFileSync('ip', ['link', 'show', 'centium0'], { stdio: 'ignore' });
       return true;
     } catch {
       return false;
@@ -1281,6 +1385,7 @@ export class TorManager {
     this.stopSupervisionWatchdog();
     this.isConnecting = false;
     this.bootstrapPercent = 0; // Clear stale bootstrap percentage
+    this.torOutputTail = []; // Clear stale Tor output
     this.addLog('[Cleanup] Ensuring TUN network state is completely rolled back and normal networking restored...');
     try {
       await this.runNetworkAction('disable');

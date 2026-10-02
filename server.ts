@@ -1,8 +1,11 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { torManager } from './server/torManager.ts';
+
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
 import {
   CENTIUM_SYSTEMD_SERVICE,
   CENTIUM_HEV_SERVICE,
@@ -139,6 +142,7 @@ async function startServer() {
   } else {
     // Development mode fallback when dist is not yet built
     try {
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: 'spa',

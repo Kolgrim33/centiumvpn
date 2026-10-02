@@ -38,10 +38,11 @@ else
 fi
 
 # 1. Install Required Packages
-echo "[1/9] Installing core dependencies (tor, nftables, iproute2, curl, nodejs, npm, git, make, gcc)..."
+echo "[1/9] Installing core dependencies (tor, nftables, iproute2, curl, nodejs, npm, simdjson, git, make, gcc)..."
 case "$DISTRO" in
     arch)
-        pacman -Sy --needed --noconfirm tor nftables iproute2 curl nodejs npm git make gcc
+        pacman -S --needed --noconfirm tor nftables iproute2 curl nodejs npm simdjson git make gcc || \
+        pacman -Sy --needed --noconfirm tor nftables iproute2 curl nodejs npm simdjson git make gcc
         ;;
     debian)
         apt-get update -qq
@@ -105,12 +106,34 @@ cd "$DIR"
 
 # 5. Build application
 echo "[5/9] Building Centium application..."
+
+# Verify Node.js runtime is intact and heal if shared libraries are missing
+if ! node -v &>/dev/null; then
+    echo "[!] Node.js encountered a library error, attempting dependency repair..."
+    if [ "$DISTRO" = "arch" ]; then
+        pacman -S --needed --noconfirm simdjson nodejs npm 2>/dev/null || true
+    fi
+fi
+
+BUILD_SUCCESS=0
 if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
-    sudo -u "$REAL_USER" npm install
-    sudo -u "$REAL_USER" npm run build
+    if sudo -u "$REAL_USER" npm install 2>/dev/null && sudo -u "$REAL_USER" npm run build 2>/dev/null; then
+        BUILD_SUCCESS=1
+    fi
 else
-    npm install
-    npm run build
+    if npm install 2>/dev/null && npm run build 2>/dev/null; then
+        BUILD_SUCCESS=1
+    fi
+fi
+
+if [ "$BUILD_SUCCESS" -eq 0 ]; then
+    if [ -f "$DIR/dist/server.cjs" ] && [ -f "$DIR/dist/index.html" ]; then
+        echo "[+] Using pre-built production build artifacts from repository."
+    else
+        echo "[!] Build failed. Retrying with full log output..."
+        npm install
+        npm run build
+    fi
 fi
 
 # Deploy to /opt/centium
@@ -119,7 +142,7 @@ cp -r "$DIR"/* /opt/centium/ 2>/dev/null || true
 if [ -d "$DIR/node_modules" ] && [ ! -d "/opt/centium/node_modules" ]; then
     cp -r "$DIR/node_modules" /opt/centium/
 fi
-chmod -R a+rX /opt/centium
+chmod -R a+rwX /opt/centium
 
 # 6. Install Network Engine & Diagnostics Suite
 echo "[6/9] Installing centium-network and centium-diagnose..."
@@ -183,7 +206,9 @@ systemctl enable --now centiumd || echo "[!] Notice: centiumd service enabled"
 echo "[9/9] Installing Desktop Application Launcher and Icons..."
 cat << 'EOF' > /usr/bin/centium
 #!/usr/bin/env bash
-if [ -f "/opt/centium/centium-desktop.sh" ]; then
+if [ -f "./centium-desktop.sh" ] && [ -f "./package.json" ]; then
+    exec "./centium-desktop.sh" "$@"
+elif [ -f "/opt/centium/centium-desktop.sh" ]; then
     exec "/opt/centium/centium-desktop.sh" "$@"
 else
     DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"

@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { torManager } from './server/torManager.ts';
@@ -111,19 +112,47 @@ async function startServer() {
     });
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
+  // Serve built assets whenever dist/index.html is available or in production mode
+  const distCandidates = [
+    path.join(process.cwd(), 'dist'),
+    '/opt/centium/dist',
+  ];
+  if (typeof __dirname !== 'undefined') {
+    distCandidates.push(path.join(__dirname, '../dist'), path.join(__dirname, '.'));
+  }
+  const distPath = distCandidates.find((p) => {
+    try {
+      return fs.existsSync(path.join(p, 'index.html'));
+    } catch {
+      return false;
+    }
+  });
+
+  const isProduction = process.env.NODE_ENV === 'production' || !!distPath;
+
+  if (isProduction && distPath) {
+    console.log(`[Centium] Serving production frontend from ${distPath}`);
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+  } else {
+    // Development mode fallback when dist is not yet built
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } catch (viteErr: any) {
+      console.warn('[Centium] Failed to start Vite middleware, serving static fallback:', viteErr.message);
+      if (distPath) {
+        app.use(express.static(distPath));
+        app.get('*', (req, res) => {
+          res.sendFile(path.join(distPath, 'index.html'));
+        });
+      }
+    }
   }
 
   // Graceful termination

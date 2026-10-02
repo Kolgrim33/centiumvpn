@@ -29,6 +29,7 @@ fi
 
 if ! curl -s "$URL/api/health" &>/dev/null; then
     echo "[Centium] Starting local daemon engine on port $PORT..."
+    export NODE_ENV=production
     if [ -f "$DIR/dist/server.cjs" ]; then
         node "$DIR/dist/server.cjs" &
     else

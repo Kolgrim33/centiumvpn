@@ -13,39 +13,48 @@ URL="http://127.0.0.1:$PORT"
 
 # 1. Start Centium Core server if not already active
 if ! curl -s "$URL/api/health" &>/dev/null; then
-    # Try starting the centiumd system service first if systemctl exists
-    if command -v systemctl &>/dev/null; then
-        echo "[Centium] Checking centiumd system service..."
-        sudo systemctl start centiumd 2>/dev/null || systemctl start centiumd 2>/dev/null || true
-        for i in {1..10}; do
+    echo "[Centium] Core daemon not detected. Starting centiumd service with elevated privileges..."
+    if command -v pkexec &>/dev/null; then
+        pkexec systemctl start centiumd 2>/dev/null || true
+    elif command -v sudo &>/dev/null; then
+        sudo systemctl start centiumd 2>/dev/null || true
+    elif command -v systemctl &>/dev/null; then
+        systemctl start centiumd 2>/dev/null || true
+    fi
+
+    # Wait for daemon to become active
+    for i in {1..20}; do
+        if curl -s "$URL/api/health" &>/dev/null; then
+            echo "[Centium] Core system daemon is active and healthy."
+            break
+        fi
+        sleep 0.5
+    done
+fi
+
+if ! curl -s "$URL/api/health" &>/dev/null; then
+    echo "[!] Warning: Centium daemon (centiumd) is not active and requires root privileges."
+    echo "    Please start the daemon with: sudo systemctl start centiumd"
+    # If running as root (e.g. debugging/headless), start the local engine directly
+    if [ "$(id -u)" -eq 0 ]; then
+        echo "[Centium] Running as root, starting engine directly..."
+        export NODE_ENV=production
+        if [ -f "$DIR/dist/server.cjs" ]; then
+            node "$DIR/dist/server.cjs" &
+        else
+            node "$DIR/dist/server.cjs" &
+        fi
+        SERVER_PID=$!
+        trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+
+        for i in {1..30}; do
             if curl -s "$URL/api/health" &>/dev/null; then
-                echo "[Centium] Core system daemon active."
+                echo "[Centium] Core engine ready."
                 break
             fi
             sleep 0.5
         done
     fi
-fi
-
-if ! curl -s "$URL/api/health" &>/dev/null; then
-    echo "[Centium] Starting local daemon engine on port $PORT..."
-    export NODE_ENV=production
-    if [ -f "$DIR/dist/server.cjs" ]; then
-        node "$DIR/dist/server.cjs" &
-    else
-        npm start &
-    fi
-    SERVER_PID=$!
-    trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-
-    # Wait for server ready
-    for i in {1..30}; do
-        if curl -s "$URL/api/health" &>/dev/null; then
-            echo "[Centium] Core engine ready."
-            break
-        fi
-        sleep 0.5
-    done
 fi
 
 # 2. Launch as a standalone Desktop Window (no browser tabs, isolated session)

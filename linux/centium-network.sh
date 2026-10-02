@@ -57,12 +57,12 @@ CURL_CMD="$(find_executable curl || true)"
 resolve_tor_user() {
     if [ -n "${CENTIUM_TOR_UID:-}" ]; then
         TOR_USER="$CENTIUM_TOR_UID"
-    elif [ -n "${2:-}" ] && [ "${1:-}" = "enable" ]; then
+    elif [ -n "${2:-}" ]; then
         TOR_USER="$2"
-    elif id "tor" &>/dev/null; then
-        TOR_USER="tor"
     elif id "debian-tor" &>/dev/null; then
         TOR_USER="debian-tor"
+    elif id "tor" &>/dev/null; then
+        TOR_USER="tor"
     else
         TOR_USER="$(id -un)"
     fi
@@ -92,6 +92,7 @@ log_err() {
 install_killswitch() {
     log "Installing fail-closed nftables kill switch (table ${NFT_FAMILY} ${NFT_TABLE})..."
     mkdir -p "$RUNTIME_DIR"
+    chmod 777 "$RUNTIME_DIR" 2>/dev/null || true
 
     # Define atomic ruleset for table inet centium:
     # - Default drop on output, input, and forward
@@ -176,7 +177,7 @@ mapdns:
 
 misc:
   task-stack-size: 81920
-  connect-timeout: 5000
+  connect-timeout: 60000
   read-write-timeout: 60000
   log-level: warn
   limit-nofile: 65535

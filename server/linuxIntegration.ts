@@ -77,7 +77,7 @@ makedepends=('git' 'make' 'gcc' 'nodejs' 'npm')
 backup=('etc/centium/config.json')
 source=(
     "$pkgname-$pkgver.tar.gz"
-    "git+https://github.com/heiher/hev-socks5-tunnel.git#commit=9a06bc6e8b4e78347f3b890fa25e6e1ad1bf5d8f"
+    "git+https://github.com/heiher/hev-socks5-tunnel.git#commit=9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a"
 )
 sha256sums=('SKIP' 'SKIP')
 

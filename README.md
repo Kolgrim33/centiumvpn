@@ -21,30 +21,34 @@ This opens Centium in a dedicated, distraction-free desktop window with the Cent
 
 ---
 
-## 2. How System-Wide VPN Routing Actually Works on Arch Linux
+## 2. How System-Wide VPN Routing Actually Works on Linux
 
 In the codebase:
-- **`server/torManager.ts`**: Controls the local Tor process (`/usr/bin/tor`), manages ControlPort `9051`, generates the hardened `torrc` (enabling `TransPort 9040` and `DNSPort 5353`), monitors 100% bootstrap progress, and invokes the routing manager.
-- **`linux/centium-routing.sh`**: The privileged firewall and routing engine. When you click **Connect**, it executes:
-  1. Sets `/etc/resolv.conf` to `nameserver 127.0.0.1` so system DNS queries route to Tor DNSPort (`5353`).
-  2. Creates the `CENTIUM_NAT` iptables chain: redirects outbound TCP SYN packets to Tor TransPort (`9040`).
-  3. Bypasses the local `tor` user process (auto-detected as user `tor` on Arch Linux and `debian-tor` on Debian/Ubuntu) so Tor itself can communicate with outside relays.
-  4. Enforces the **Kill Switch** (`CENTIUM_FILTER` chain): drops any outbound packets that attempt to bypass Tor.
-  5. Drops IPv6 traffic to prevent dual-stack IPv6 leaks.
+- **`server/torManager.ts`**: Controls the local Tor process (`/usr/bin/tor`), manages ControlPort `9051`, generates the hardened `torrc`, monitors 100% bootstrap progress, and invokes the network engine.
+- **`linux/centium-network.sh`**: The privileged firewall, TUN, and routing engine (`centium-network`). When you click **Connect**, it executes:
+  1. Arms the **Fail-Closed Kill Switch**: creates the `table inet centium` in nftables with default-drop outbound policy.
+  2. Bypasses the local `tor` user process (auto-detected as `debian-tor` on Debian/Ubuntu and `tor` on Arch Linux) so Tor itself can communicate with outside relays.
+  3. Creates and brings up the virtual TUN interface (`centium0`, `198.18.0.1/15`).
+  4. Starts `hev-socks5-tunnel` to bridge packets between `centium0` and Tor's local SOCKS5 proxy (`127.0.0.1:9050`).
+  5. Installs isolated policy routing (dedicated routing table `8420` with default route through `centium0`), leaving the main system routing table untouched.
+  6. Configures mapped-DNS (`198.18.0.2`), intercepting DNS queries directly through the tunnel without plaintext leaks.
+  7. Enforces dual-stack IPv6 drop to prevent IPv6 leaks.
 
 When you click **Disconnect**:
 - Restores original `/etc/resolv.conf`.
-- Flushes `CENTIUM_NAT` and `CENTIUM_FILTER` iptables chains.
+- Flushes policy routing table `8420` and ip rule lookups.
+- Stops `hev-socks5-tunnel` and removes `centium0`.
+- Deletes the `inet centium` nftables table.
 - Restores default network routing.
 
 ---
 
-## 3. Installation on Arch Linux
+## 3. Installation on Linux (Arch, Debian, Ubuntu, Fedora)
 
 ```bash
 cd centium
 
-# 1. Run the native Linux installer (installs dependencies, routing script, sudoers, and desktop launcher)
+# 1. Run the native Linux installer (installs dependencies, hev-socks5-tunnel, centiumd systemd service, sudoers, and desktop launcher)
 sudo ./setup-linux.sh
 
 # 2. Launch Centium Desktop
@@ -53,7 +57,7 @@ centium
 
 ---
 
-## 4. Manual Verification in Terminal
+## 4. Manual Verification & Diagnostics in Terminal
 
 While Centium is **Connected**, verify in another terminal:
 
@@ -61,11 +65,14 @@ While Centium is **Connected**, verify in another terminal:
 # Verify your IP is an encrypted Tor Exit Relay
 curl https://check.torproject.org/api/ip
 
-# Verify active iptables transparent routing rules
-sudo centium-routing status
+# Verify active TUN interface, nftables kill switch, and routing status
+sudo centium-network status
+
+# Run the automated diagnostic test suite
+centium-diagnose
 ```
 
 To manually reset your network at any time:
 ```bash
-sudo centium-routing disable
+sudo centium-network disable
 ```

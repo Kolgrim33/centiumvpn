@@ -13,8 +13,27 @@ URL="http://127.0.0.1:$PORT"
 
 # 1. Start Centium Core server if not already active
 if ! curl -s "$URL/api/health" &>/dev/null; then
+    # Try starting the centiumd system service first if systemctl exists
+    if command -v systemctl &>/dev/null; then
+        echo "[Centium] Checking centiumd system service..."
+        sudo systemctl start centiumd 2>/dev/null || systemctl start centiumd 2>/dev/null || true
+        for i in {1..10}; do
+            if curl -s "$URL/api/health" &>/dev/null; then
+                echo "[Centium] Core system daemon active."
+                break
+            fi
+            sleep 0.5
+        done
+    fi
+fi
+
+if ! curl -s "$URL/api/health" &>/dev/null; then
     echo "[Centium] Starting local daemon engine on port $PORT..."
-    npm start &
+    if [ -f "$DIR/dist/server.cjs" ]; then
+        node "$DIR/dist/server.cjs" &
+    else
+        npm start &
+    fi
     SERVER_PID=$!
     trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
 

@@ -119,6 +119,7 @@ cp -r "$DIR"/* /opt/centium/ 2>/dev/null || true
 if [ -d "$DIR/node_modules" ] && [ ! -d "/opt/centium/node_modules" ]; then
     cp -r "$DIR/node_modules" /opt/centium/
 fi
+chmod -R a+rX /opt/centium
 
 # 6. Install Network Engine & Diagnostics Suite
 echo "[6/9] Installing centium-network and centium-diagnose..."

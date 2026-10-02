@@ -61,7 +61,7 @@ systemctl disable tor 2>/dev/null || true
 echo "[3/9] Creating runtime directories (/run/centium, /var/lib/centium/tor, /opt/centium)..."
 mkdir -p /run/centium
 mkdir -p /var/lib/centium/tor
-chmod 775 /run/centium
+chmod 777 /run/centium
 chmod 755 /var/lib/centium
 chmod 700 /var/lib/centium/tor
 
@@ -83,7 +83,7 @@ rm -rf "$HEV_BUILD_DIR"
 git clone --depth 1 --branch 2.17.1 https://github.com/heiher/hev-socks5-tunnel.git "$HEV_BUILD_DIR"
 cd "$HEV_BUILD_DIR"
 
-EXPECTED_COMMIT="9a06bc6e8b4e78347f3b890fa25e6e1ad1bf5d8f"
+EXPECTED_COMMIT="9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a"
 CURRENT_COMMIT="$(git rev-parse HEAD)"
 if [ "$CURRENT_COMMIT" != "$EXPECTED_COMMIT" ]; then
     echo "[!] Pinned commit mismatch! Expected $EXPECTED_COMMIT, got $CURRENT_COMMIT"
@@ -154,9 +154,14 @@ ALL ALL=(ALL) NOPASSWD: /usr/bin/ip
 ALL ALL=(ALL) NOPASSWD: /usr/bin/ip *
 ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop tor
 ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl start tor
-ALL ALL=(ALL) NOPASSWD: /usr/bin/killall tor
-ALL ALL=(ALL) NOPASSWD: /usr/bin/pkill -9 tor
-ALL ALL=(ALL) NOPASSWD: /usr/bin/pkill -9 -f ^tor
+ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl start centiumd
+ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop centiumd
+ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart centiumd
+ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl status centiumd
+ALL ALL=(ALL) NOPASSWD: /bin/systemctl start centiumd
+ALL ALL=(ALL) NOPASSWD: /bin/systemctl stop centiumd
+ALL ALL=(ALL) NOPASSWD: /bin/systemctl restart centiumd
+ALL ALL=(ALL) NOPASSWD: /bin/systemctl status centiumd
 EOF
 chmod 440 /etc/sudoers.d/centium
 if command -v visudo &>/dev/null; then

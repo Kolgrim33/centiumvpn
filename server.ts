@@ -30,6 +30,9 @@ async function startServer() {
 
   app.post('/api/connect', async (req, res) => {
     try {
+      if (torManager.isConnectInProgress()) {
+        return res.status(409).json({ success: false, message: 'Connection already in progress' });
+      }
       if (req.body && typeof req.body === 'object') {
         torManager.updateConfig(req.body);
       }
@@ -154,8 +157,8 @@ async function startServer() {
     console.error('[Centium Warning] Unhandled promise rejection:', reason);
   });
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Centium] Daemon listening on http://0.0.0.0:${PORT}`);
+  app.listen(PORT, '127.0.0.1', () => {
+    console.log(`[Centium] Daemon listening on http://127.0.0.1:${PORT}`);
   });
 }
 

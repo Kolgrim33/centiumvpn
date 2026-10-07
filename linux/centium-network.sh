@@ -171,7 +171,7 @@ generate_hev_config() {
     cat << EOF > "$HEV_CONFIG"
 tunnel:
   name: ${TUN_DEV}
-  mtu: 8500
+  mtu: 1500
   ipv4: 198.18.0.1
   ipv6: "fc00::1"
 
@@ -191,7 +191,7 @@ misc:
   task-stack-size: 81920
   connect-timeout: 60000
   read-write-timeout: 60000
-  log-level: warn
+  log-level: info
   limit-nofile: 65535
 EOF
     chmod 644 "$HEV_CONFIG"
@@ -207,9 +207,16 @@ start_hev_bridge() {
         if ! "$IP_CMD" link show "$TUN_DEV" &>/dev/null; then
             "$IP_CMD" tuntap add dev "$TUN_DEV" mode tun 2>/dev/null || true
         fi
+        "$IP_CMD" link set dev "$TUN_DEV" mtu 1500 2>/dev/null || true
         "$IP_CMD" link set dev "$TUN_DEV" up 2>/dev/null || true
         "$IP_CMD" addr add "$TUN_IPV4" dev "$TUN_DEV" 2>/dev/null || true
     fi
+
+    # Disable reverse path filtering on TUN interface to allow return routing
+    sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf.all.rp_filter=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf.default.rp_filter=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf."${TUN_DEV}".rp_filter=0 >/dev/null 2>&1 || true
 
     local bridge_pid=""
     local bridge_name=""
@@ -313,18 +320,41 @@ install_routing() {
         return 1
     fi
 
+    # Disable reverse path filtering so incoming responses on centium0 are not dropped by the kernel
+    sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf.all.rp_filter=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf.default.rp_filter=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf."${TUN_DEV}".rp_filter=0 >/dev/null 2>&1 || true
+
     # Clean existing Centium rules/routes in table 8420 to prevent duplicates
+    "$IP_CMD" rule del pref 8415 2>/dev/null || true
+    "$IP_CMD" rule del pref 8416 2>/dev/null || true
+    "$IP_CMD" rule del pref 8417 2>/dev/null || true
+    "$IP_CMD" rule del pref 8418 2>/dev/null || true
+    "$IP_CMD" rule del pref 8419 2>/dev/null || true
+    "$IP_CMD" rule del pref 8420 2>/dev/null || true
     "$IP_CMD" rule del fwmark "$FWMARK" lookup main 2>/dev/null || true
     "$IP_CMD" rule del uidrange "${TOR_NUMERIC_UID}-${TOR_NUMERIC_UID}" lookup main 2>/dev/null || true
     "$IP_CMD" rule del not fwmark "$FWMARK" lookup "$ROUTING_TABLE" 2>/dev/null || true
     "$IP_CMD" rule del lookup "$ROUTING_TABLE" 2>/dev/null || true
     "$IP_CMD" route flush table "$ROUTING_TABLE" 2>/dev/null || true
 
+    # Explicit network routes on centium0
+    "$IP_CMD" route add 198.18.0.0/15 dev "$TUN_DEV" table "$ROUTING_TABLE" 2>/dev/null || true
+    "$IP_CMD" route add 100.64.0.0/10 dev "$TUN_DEV" table "$ROUTING_TABLE" 2>/dev/null || true
+    "$IP_CMD" route add 198.18.0.0/15 dev "$TUN_DEV" 2>/dev/null || true
+    "$IP_CMD" route add 100.64.0.0/10 dev "$TUN_DEV" 2>/dev/null || true
+
     # Default route for table 8420 goes through centium0
     if ! "$IP_CMD" route add default dev "$TUN_DEV" table "$ROUTING_TABLE"; then
         log_err "Failed to add default route dev ${TUN_DEV} to table ${ROUTING_TABLE}!"
         return 1
     fi
+
+    # Dedicated policy routing for mapped-DNS and mapped fake IPs
+    "$IP_CMD" rule add to 198.18.0.0/15 lookup "$ROUTING_TABLE" pref 8415 2>/dev/null || true
+    "$IP_CMD" rule add to 100.64.0.0/10 lookup "$ROUTING_TABLE" pref 8416 2>/dev/null || true
+    "$IP_CMD" rule add from 198.18.0.0/15 lookup "$ROUTING_TABLE" pref 8417 2>/dev/null || true
 
     # Route Tor's own process to main table (so it uses physical eth/wifi directly)
     "$IP_CMD" rule add fwmark "$FWMARK" lookup main pref 8418
@@ -343,6 +373,9 @@ install_routing() {
 remove_routing() {
     log "Removing policy routing rules and flushing table ${ROUTING_TABLE}..."
     if [ -n "$IP_CMD" ]; then
+        "$IP_CMD" rule del pref 8415 2>/dev/null || true
+        "$IP_CMD" rule del pref 8416 2>/dev/null || true
+        "$IP_CMD" rule del pref 8417 2>/dev/null || true
         "$IP_CMD" rule del pref 8418 2>/dev/null || true
         "$IP_CMD" rule del pref 8419 2>/dev/null || true
         "$IP_CMD" rule del pref 8420 2>/dev/null || true
@@ -350,6 +383,8 @@ remove_routing() {
         "$IP_CMD" rule del uidrange "${TOR_NUMERIC_UID}-${TOR_NUMERIC_UID}" lookup main 2>/dev/null || true
         "$IP_CMD" rule del not fwmark "$FWMARK" lookup "$ROUTING_TABLE" 2>/dev/null || true
         "$IP_CMD" rule del lookup "$ROUTING_TABLE" 2>/dev/null || true
+        "$IP_CMD" route del 100.64.0.0/10 dev "$TUN_DEV" 2>/dev/null || true
+        "$IP_CMD" route del 198.18.0.0/15 dev "$TUN_DEV" 2>/dev/null || true
         "$IP_CMD" route flush table "$ROUTING_TABLE" 2>/dev/null || true
     fi
 }
@@ -379,13 +414,12 @@ install_dns() {
         cp -L /etc/resolv.conf "$RESOLV_BACKUP" 2>/dev/null || true
     fi
 
-    # Atomically configure resolv.conf to point to internal mapped-DNS
+    # Atomically configure resolv.conf to point to internal mapped-DNS (standard RFC 1035 format, no edns0)
     local tmp_resolv="${RUNTIME_DIR}/resolv.conf.tmp"
     cat << EOF > "$tmp_resolv"
 # Generated by Centium VPN
 # Queries are intercepted by hev-socks5-tunnel and resolved via Tor SOCKS5
 nameserver ${DNS_MAPPED_IP}
-options edns0
 EOF
     chmod 644 "$tmp_resolv"
 

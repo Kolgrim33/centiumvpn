@@ -1029,7 +1029,7 @@ export class TorManager {
     // This confirms that system traffic routes through centium0 / policy routing table 8420
     const checkDirect = (): Promise<{ ip: string; isTor: boolean } | null> => {
       return new Promise((resolve) => {
-        execFile('curl', ['-s', '--connect-timeout', '8', '--max-time', '12', 'https://check.torproject.org/api/ip'], (err, stdout) => {
+        execFile('curl', ['-s', '--connect-timeout', '8', '--max-time', '12', 'https://check.torproject.org/api/ip'], async (err, stdout) => {
           if (!err && stdout) {
             try {
               const data = JSON.parse(stdout);
@@ -1038,7 +1038,18 @@ export class TorManager {
               }
             } catch {}
           }
-          resolve(null);
+
+          // Secondary direct unproxied test through TUN: icanhazip validated via Tor consensus
+          execFile('curl', ['-s', '--connect-timeout', '8', '--max-time', '12', 'https://icanhazip.com'], async (err2, stdout2) => {
+            if (!err2 && stdout2 && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(stdout2.trim())) {
+              const directIp = stdout2.trim();
+              const isTorRelay = await checkOnionoo(directIp);
+              if (isTorRelay) {
+                return resolve({ ip: directIp, isTor: true });
+              }
+            }
+            resolve(null);
+          });
         });
       });
     };

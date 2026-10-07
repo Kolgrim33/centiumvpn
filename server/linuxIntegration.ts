@@ -95,16 +95,31 @@ build() {
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
-    # Install binaries
-    install -Dm755 "$srcdir/hev-socks5-tunnel/bin/hev-socks5-tunnel" "$pkgdir/usr/local/bin/hev-socks5-tunnel"
-    install -Dm755 linux/centium-network.sh "$pkgdir/usr/local/bin/centium-network"
-    install -Dm755 linux/centium-diagnose.sh "$pkgdir/usr/local/bin/centium-diagnose"
+
+    # Install daemon and app files to /opt/centium
+    install -d "$pkgdir/opt/centium"
+    cp -r dist node_modules package.json centium-desktop.sh "$pkgdir/opt/centium/"
+    chmod 755 "$pkgdir/opt/centium/centium-desktop.sh"
+
+    # Install helper binaries and scripts to /usr/bin
+    install -Dm755 "$srcdir/hev-socks5-tunnel/bin/hev-socks5-tunnel" "$pkgdir/usr/bin/hev-socks5-tunnel"
+    install -Dm755 linux/centium-network.sh "$pkgdir/usr/bin/centium-network"
+    install -Dm755 linux/centium-diagnose.sh "$pkgdir/usr/bin/centium-diagnose"
     install -Dm755 linux/centiumd "$pkgdir/usr/bin/centiumd"
+
+    # Desktop wrapper
+    install -d "$pkgdir/usr/bin"
+    cat << 'EOF' > "$pkgdir/usr/bin/centium"
+#!/usr/bin/env bash
+exec /opt/centium/centium-desktop.sh "$@"
+EOF
+    chmod 755 "$pkgdir/usr/bin/centium"
 
     # Install services
     install -Dm644 linux/centiumd.service "$pkgdir/usr/lib/systemd/system/centiumd.service"
     install -Dm644 linux/centium-hev-socks5.service "$pkgdir/usr/lib/systemd/system/centium-hev-socks5.service"
     install -Dm644 linux/centium.desktop "$pkgdir/usr/share/applications/centium.desktop"
+    install -Dm644 public/favicon.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/centium.svg"
 }
 `;
 

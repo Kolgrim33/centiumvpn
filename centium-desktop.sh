@@ -59,6 +59,14 @@ fi
 
 # 2. Launch as a standalone Desktop Window (no browser tabs, isolated session)
 echo "[Centium] Opening desktop application window..."
+PID_CLIENT=""
+
+cleanup_desktop() {
+    if [ -n "$SERVER_PID" ]; then
+        kill "$SERVER_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup_desktop EXIT INT TERM
 
 if command -v electron &>/dev/null; then
     electron "$DIR/electron/main.cjs"

@@ -132,11 +132,12 @@ install_killswitch() {
         oif \"lo\" accept
         ct state established,related accept
         skuid ${TOR_NUMERIC_UID} accept
-        oifname \"${TUN_DEV}\" accept
         udp sport 68 udp dport 67 accept
         udp dport 123 accept
-        ${block_ipv6_rule}
+        oifname \"${TUN_DEV}\" ip daddr ${DNS_MAPPED_IP} udp dport 53 accept
         meta l4proto udp reject with icmpx type port-unreachable
+        oifname \"${TUN_DEV}\" accept
+        ${block_ipv6_rule}
     }
 
     chain route_hook {
@@ -213,17 +214,7 @@ start_hev_bridge() {
     local bridge_pid=""
     local bridge_name=""
 
-    # 2. Check for tun2socks
-    local tun2socks_bin
-    tun2socks_bin="$(find_executable tun2socks || true)"
-    for p in /usr/local/bin/tun2socks /usr/bin/tun2socks /opt/centium/bin/tun2socks; do
-        if [ -x "$p" ]; then
-            tun2socks_bin="$p"
-            break
-        fi
-    done
-
-    # 3. Check for hev-socks5-tunnel
+    # 2. Check for hev-socks5-tunnel (Primary bridge engine with native mapped-DNS 198.18.0.2)
     if [ -z "$HEV_BIN" ]; then
         for p in /usr/local/bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel /opt/centium/bin/hev-socks5-tunnel; do
             if [ -x "$p" ]; then
@@ -233,28 +224,38 @@ start_hev_bridge() {
         done
     fi
 
-    # Try tun2socks first if available (works seamlessly in all Linux & container environments)
-    if [ -n "$tun2socks_bin" ] && [ -x "$tun2socks_bin" ]; then
-        log "Starting tun2socks bridge on ${TUN_DEV} -> ${SOCKS5_HOST}:${SOCKS5_PORT}..."
-        "$tun2socks_bin" -device "tun://${TUN_DEV}" -proxy "socks5://${SOCKS5_HOST}:${SOCKS5_PORT}" -loglevel debug > "$HEV_LOG_FILE" 2>&1 &
-        local candidate_pid=$!
-        sleep 0.5
-        if kill -0 "$candidate_pid" 2>/dev/null; then
-            bridge_pid="$candidate_pid"
-            bridge_name="tun2socks"
+    # 3. Check for tun2socks (fallback only)
+    local tun2socks_bin
+    tun2socks_bin="$(find_executable tun2socks || true)"
+    for p in /usr/local/bin/tun2socks /usr/bin/tun2socks /opt/centium/bin/tun2socks; do
+        if [ -x "$p" ]; then
+            tun2socks_bin="$p"
+            break
         fi
-    fi
+    done
 
-    # Fallback to hev-socks5-tunnel if tun2socks didn't start or isn't present
-    if [ -z "$bridge_pid" ] && [ -n "$HEV_BIN" ] && [ -x "$HEV_BIN" ]; then
+    # Prefer hev-socks5-tunnel (crucial: provides mapped-DNS on 198.18.0.2 via Tor SOCKS5)
+    if [ -n "$HEV_BIN" ] && [ -x "$HEV_BIN" ]; then
         generate_hev_config
-        log "Starting hev-socks5-tunnel bridge on ${TUN_DEV}..."
+        log "Starting hev-socks5-tunnel bridge on ${TUN_DEV} (with mapped-DNS ${DNS_MAPPED_IP})..."
         "$HEV_BIN" "$HEV_CONFIG" > "$HEV_LOG_FILE" 2>&1 &
         local candidate_pid=$!
         sleep 0.5
         if kill -0 "$candidate_pid" 2>/dev/null; then
             bridge_pid="$candidate_pid"
             bridge_name="hev-socks5-tunnel"
+        fi
+    fi
+
+    # Fallback to tun2socks only if hev-socks5-tunnel failed or is not available
+    if [ -z "$bridge_pid" ] && [ -n "$tun2socks_bin" ] && [ -x "$tun2socks_bin" ]; then
+        log "Warning: hev-socks5-tunnel not available. Falling back to tun2socks on ${TUN_DEV} -> ${SOCKS5_HOST}:${SOCKS5_PORT}..."
+        "$tun2socks_bin" -device "tun://${TUN_DEV}" -proxy "socks5://${SOCKS5_HOST}:${SOCKS5_PORT}" -loglevel debug > "$HEV_LOG_FILE" 2>&1 &
+        local candidate_pid=$!
+        sleep 0.5
+        if kill -0 "$candidate_pid" 2>/dev/null; then
+            bridge_pid="$candidate_pid"
+            bridge_name="tun2socks"
         fi
     fi
 

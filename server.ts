@@ -30,6 +30,37 @@ async function startServer() {
     next();
   });
 
+  // Block Cross-Site Request Forgery (CSRF) from external websites dropping or altering VPN
+  app.use('/api', (req, res, next) => {
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+      const origin = req.headers.origin;
+      const referer = req.headers.referer;
+      const secFetchSite = req.headers['sec-fetch-site'];
+
+      // Reject if browser marks request as cross-site
+      if (secFetchSite === 'cross-site') {
+        return res.status(403).json({ error: 'Forbidden: cross-site requests are rejected' });
+      }
+
+      // If Origin is present, must be localhost or local desktop app
+      if (origin) {
+        const isLocalOrigin = /^(https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?|null|app:\/\/|tauri:\/\/|electron:\/\/|vscode-webview:\/\/)/i.test(origin);
+        if (!isLocalOrigin) {
+          return res.status(403).json({ error: 'Forbidden: unauthorized cross-origin request' });
+        }
+      }
+
+      // If Referer is present and Origin is missing, must be localhost
+      if (!origin && referer) {
+        const isLocalReferer = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(referer);
+        if (!isLocalReferer) {
+          return res.status(403).json({ error: 'Forbidden: unauthorized referer' });
+        }
+      }
+    }
+    next();
+  });
+
   app.use(express.json());
 
   // Centium IPC / REST endpoints

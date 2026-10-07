@@ -61,21 +61,21 @@ fi
 echo "[Centium] Opening desktop application window..."
 
 if command -v electron &>/dev/null; then
-    exec electron "$DIR/electron/main.cjs"
+    electron "$DIR/electron/main.cjs"
 elif npx --no-install electron -v &>/dev/null; then
-    exec npx electron "$DIR/electron/main.cjs"
+    npx electron "$DIR/electron/main.cjs"
 elif command -v chromium &>/dev/null; then
-    exec chromium --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
+    chromium --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v google-chrome-stable &>/dev/null; then
-    exec google-chrome-stable --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
+    google-chrome-stable --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v google-chrome &>/dev/null; then
-    exec google-chrome --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
+    google-chrome --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v brave-browser &>/dev/null; then
-    exec brave-browser --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
+    brave-browser --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v brave &>/dev/null; then
-    exec brave --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
+    brave --app="$URL" --user-data-dir="/tmp/centium-app-profile" --class="CentiumVPN" --window-size=960,680
 elif command -v flatpak &>/dev/null && flatpak info org.chromium.Chromium &>/dev/null; then
-    exec flatpak run org.chromium.Chromium --app="$URL" --user-data-dir="/tmp/centium-app-profile"
+    flatpak run org.chromium.Chromium --app="$URL" --user-data-dir="/tmp/centium-app-profile"
 else
     echo "[Centium] Opening in default viewer..."
     xdg-open "$URL"

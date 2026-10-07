@@ -121,10 +121,10 @@ if [ -f "$tor_log_file" ] && grep -q "Bootstrapped 100%" "$tor_log_file"; then
     bootstrap_ok=1
 fi
 
-# Also test quick socks response to check.torproject.org
-if command -v curl &>/dev/null; then
-    quick_test="$(curl -s --connect-timeout 4 --max-time 6 --socks5-hostname 127.0.0.1:${SOCKS5_PORT} https://check.torproject.org/api/ip 2>/dev/null || true)"
-    if echo "$quick_test" | grep -qi '"IsTor":true'; then
+# Check ControlPort bootstrap status if available
+if [ "$bootstrap_ok" -eq 0 ] && command -v nc &>/dev/null; then
+    ctrl_resp="$(printf 'AUTHENTICATE ""\r\nGETINFO status/bootstrap-phase\r\nQUIT\r\n' | nc -w 2 127.0.0.1 9051 2>/dev/null || true)"
+    if echo "$ctrl_resp" | grep -q "PROGRESS=100"; then
         bootstrap_ok=1
     fi
 fi
@@ -133,7 +133,7 @@ if [ "$bootstrap_ok" -eq 1 ]; then
     report_pass "Tor bootstrap" "100% complete (consensus synchronized)"
 else
     if [ -n "$tor_pid" ]; then
-        report_fail "Tor bootstrap" "Tor circuit bootstrap incomplete" "Check system clock and firewall allowing outbound TCP 443/9001."
+        report_fail "Tor bootstrap" "Tor circuit bootstrap incomplete (consensus not reached)" "Check /run/centium/tor.log and system clock."
     else
         report_fail "Tor bootstrap" "Tor process not running" "Start Tor before bootstrapping."
     fi
@@ -195,9 +195,6 @@ if command -v ip &>/dev/null; then
     if [ "$has_table_route" -eq 1 ] && [ "$has_policy_rule" -eq 1 ]; then
         routing_ok=1
         routing_detail="Table ${ROUTING_TABLE} active (default dev ${TUN_DEV})"
-    elif [ -f /run/centium/routing.status ] && grep -q "active_direct" /run/centium/routing.status 2>/dev/null; then
-        routing_ok=1
-        routing_detail="TUN direct interface route active (${TUN_DEV})"
     fi
 fi
 
@@ -221,11 +218,6 @@ if command -v nft &>/dev/null; then
     fi
 fi
 
-if [ "$killswitch_ok" -eq 0 ] && [ -f /run/centium/killswitch.status ]; then
-    killswitch_ok=1
-    killswitch_detail="Fail-closed kill switch policy active"
-fi
-
 if [ "$killswitch_ok" -eq 1 ]; then
     report_pass "nftables kill switch" "$killswitch_detail"
 else
@@ -245,16 +237,10 @@ elif command -v resolvectl &>/dev/null && resolvectl dns "${TUN_DEV}" 2>/dev/nul
     dns_detail="systemd-resolved interface ${TUN_DEV} -> ${DNS_MAPPED_IP}"
 fi
 
-# Verify DNS resolution fallback if not already confirmed
-if [ "$dns_ok" -eq 0 ] && command -v getent &>/dev/null && timeout 1 getent hosts check.torproject.org &>/dev/null; then
-    dns_ok=1
-    dns_detail="DNS resolution functioning"
-fi
-
 if [ "$dns_ok" -eq 1 ]; then
-    report_pass "DNS configuration" "${dns_detail:-Protected via mapped-DNS}"
+    report_pass "DNS configuration" "${dns_detail:-Protected via mapped-DNS ${DNS_MAPPED_IP}}"
 else
-    report_fail "DNS configuration" "Resolver does not point to Centium mapped-DNS" "Run 'sudo /usr/local/bin/centium-network install-dns'."
+    report_fail "DNS configuration" "Resolver does not point to Centium mapped-DNS (${DNS_MAPPED_IP})" "Run 'sudo /usr/local/bin/centium-network install-dns'."
 fi
 
 # ------------------------------------------------------------------------------
@@ -271,7 +257,7 @@ if command -v curl &>/dev/null; then
 fi
 
 if [ "$socks_tor_ok" -eq 1 ]; then
-    report_pass "Tor connectivity" "SOCKS5 path to Tor network verified"
+    report_pass "Tor connectivity" "SOCKS5 path to Tor network verified (${socks_exit_ip})"
 else
     report_fail "Tor connectivity" "Failed to reach check.torproject.org via SOCKS5 :${SOCKS5_PORT}" "Check Tor relays and network connection."
 fi
@@ -282,27 +268,21 @@ fi
 verified_exit_ip=""
 is_tor=0
 if command -v curl &>/dev/null; then
-    # Test normal curl going through system policy routing/centium0
-    system_resp="$(curl -s --connect-timeout 2 --max-time 3 https://check.torproject.org/api/ip 2>/dev/null || true)"
+    # Test normal UNPROXIED curl going through system policy routing/centium0
+    system_resp="$(curl -s --connect-timeout 8 --max-time 15 https://check.torproject.org/api/ip 2>/dev/null || true)"
     if echo "$system_resp" | grep -qi '"IsTor":true'; then
         is_tor=1
         verified_exit_ip="$(echo "$system_resp" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
     fi
-
-    # If system curl is exempt (e.g. Tor UID or direct scope), confirm verified SOCKS5 exit IP
-    if [ "$is_tor" -eq 0 ] && [ "$socks_tor_ok" -eq 1 ] && [ -n "$socks_exit_ip" ]; then
-        is_tor=1
-        verified_exit_ip="$socks_exit_ip"
-    fi
 fi
 
 if [ "$is_tor" -eq 1 ] && [ -n "$verified_exit_ip" ]; then
-    report_pass "External IP verification" "Confirmed Tor Exit Relay IP: ${verified_exit_ip}"
+    report_pass "External IP verification" "Confirmed Tor Exit Relay IP through tunnel: ${verified_exit_ip}"
 else
     if [ "$socks_tor_ok" -eq 1 ]; then
-        report_fail "External IP verification" "System requests are not reaching Tor via centium0" "Verify TUN bridge and table ${ROUTING_TABLE} default route."
+        report_fail "External IP verification" "System requests are NOT reaching Tor via centium0 (Tor SOCKS works directly, but host routing/TUN fails)" "Verify TUN bridge and table ${ROUTING_TABLE} default route."
     else
-        report_fail "External IP verification" "No external Tor IP verified" "Ensure Tor is connected and bootstrapped."
+        report_fail "External IP verification" "No external Tor IP verified through tunnel" "Ensure Tor is connected and bootstrapped."
     fi
 fi
 

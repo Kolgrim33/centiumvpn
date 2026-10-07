@@ -39,6 +39,7 @@ export class TorManager {
   private lastExitSignal: string | null = null;
   private watchdogTimer: NodeJS.Timeout | null = null;
   private isConnecting = false;
+  private isCancelled = false;
 
   private config: CentiumConfig = {
     exitLocation: 'auto',
@@ -60,6 +61,13 @@ export class TorManager {
     this.ensureDirectories();
     // Emergency cleanup of any stale rules from prior crashes
     this.recoverStaleNetworkState().catch(() => {});
+    if (this.config.autoConnect) {
+      setTimeout(() => {
+        if (this.state === 'DISCONNECTED') {
+          this.connect().catch((err) => console.error('[AutoConnect]', err));
+        }
+      }, 2000);
+    }
   }
 
   public isConnectInProgress(): boolean {
@@ -142,10 +150,12 @@ export class TorManager {
 
       try {
         if (!fs.existsSync('/run/centium')) {
-          fs.mkdirSync('/run/centium', { recursive: true, mode: 0o777 });
+          fs.mkdirSync('/run/centium', { recursive: true, mode: 0o775 });
         }
-        execSync(`chown root:${this.torUser} /run/centium 2>/dev/null || true`);
-        execSync(`chmod 777 /run/centium 2>/dev/null || true`);
+        try {
+          execFileSync('chown', [`root:${this.torUser}`, '/run/centium'], { stdio: 'ignore' });
+          execFileSync('chmod', ['775', '/run/centium'], { stdio: 'ignore' });
+        } catch {}
         canWriteRunCentium = true;
       } catch (err: any) {
         this.addLog(`[Directories] /run/centium note: ${err.message}`);
@@ -265,11 +275,13 @@ export class TorManager {
       }
     }
 
-    // Validate customBridge: restrict to safe characters [a-zA-Z0-9.:=+/ -] and no newline injection
+    // Validate customBridge: strictly enforce standard Tor bridge syntax
     if (typeof newConfig.customBridge === 'string') {
       const raw = newConfig.customBridge;
-      const sanitizedLines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const validLines = sanitizedLines.filter((line) => /^[a-zA-Z0-9.:=+\/_ -]+$/.test(line));
+      const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      // Valid Tor bridge line: [transport] IP:PORT [FINGERPRINT] [key=value ...]
+      const bridgePattern = /^(?:(obfs4|snowflake|meek)\s+)?(?:\[[a-fA-F0-9:]+\]|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5}(?:\s+[0-9A-Fa-f]{40})?(?:\s+[a-zA-Z0-9_-]+=[^\s]+)*$/;
+      const validLines = lines.filter((line) => bridgePattern.test(line));
       this.config.customBridge = validLines.join('\n');
     }
 
@@ -289,7 +301,14 @@ export class TorManager {
     if (typeof newConfig.killSwitch === 'boolean') this.config.killSwitch = newConfig.killSwitch;
     if (typeof newConfig.blockIpv6 === 'boolean') this.config.blockIpv6 = newConfig.blockIpv6;
     if (typeof newConfig.autoConnect === 'boolean') this.config.autoConnect = newConfig.autoConnect;
-    if (typeof newConfig.startWithSystem === 'boolean') this.config.startWithSystem = newConfig.startWithSystem;
+    if (typeof newConfig.startWithSystem === 'boolean') {
+      this.config.startWithSystem = newConfig.startWithSystem;
+      try {
+        if (typeof process.getuid === 'function' && process.getuid() === 0) {
+          execFile('systemctl', [newConfig.startWithSystem ? 'enable' : 'disable', 'centiumd'], () => {});
+        }
+      } catch {}
+    }
     if (typeof newConfig.dnsProtection === 'boolean') this.config.dnsProtection = newConfig.dnsProtection;
 
     // Hard-code virtualInterface to centium0 to prevent any command injection
@@ -309,6 +328,7 @@ export class TorManager {
       `ClientOnly 1`,
       `RunAsDaemon 0`,
       `Log notice stdout`,
+      `Log notice file /run/centium/tor.log`,
     ];
 
     if (this.config.exitLocation && this.config.exitLocation !== 'auto') {
@@ -673,7 +693,7 @@ export class TorManager {
       }
     }
 
-    // 7. nftables kill switch exists
+    // 7. nftables kill switch exists in kernel
     try {
       const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
       const nftOut = isRoot
@@ -681,17 +701,11 @@ export class TorManager {
         : execFileSync('sudo', ['nft', 'list', 'table', 'inet', 'centium'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
       if (nftOut.includes('chain outbound') && nftOut.includes('policy drop')) {
         this.addLog('[Audit] ✓ Fail-closed nftables kill switch verified in kernel.');
-      } else if (fs.existsSync('/run/centium/killswitch.status')) {
-        this.addLog('[Audit] ✓ Fail-closed kill switch policy verified active.');
       } else {
-        throw new Error('nftables table inet centium missing or incomplete');
+        throw new Error('nftables table inet centium missing or incomplete in kernel');
       }
     } catch (err: any) {
-      if (fs.existsSync('/run/centium/killswitch.status')) {
-        this.addLog('[Audit] ✓ Fail-closed kill switch policy verified active.');
-      } else {
-        throw new Error(`Verification failed: nftables kill switch audit failed (${err.message}).`);
-      }
+      throw new Error(`Verification failed: nftables kill switch audit failed (${err.message}). Never falling back to unverified state.`);
     }
 
     // 8. DNS resolver uses mapped-DNS

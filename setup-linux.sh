@@ -62,7 +62,7 @@ systemctl disable tor 2>/dev/null || true
 echo "[3/9] Creating runtime directories (/run/centium, /var/lib/centium/tor, /opt/centium)..."
 mkdir -p /run/centium
 mkdir -p /var/lib/centium/tor
-chmod 777 /run/centium
+chmod 775 /run/centium
 chmod 755 /var/lib/centium
 chmod 700 /var/lib/centium/tor
 
@@ -117,23 +117,16 @@ fi
 
 BUILD_SUCCESS=0
 if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
-    if sudo -u "$REAL_USER" npm install 2>/dev/null && sudo -u "$REAL_USER" npm run build 2>/dev/null; then
-        BUILD_SUCCESS=1
-    fi
+    echo "[*] Building application as user $REAL_USER..."
+    sudo -u "$REAL_USER" npm install && sudo -u "$REAL_USER" npm run build && BUILD_SUCCESS=1
 else
-    if npm install 2>/dev/null && npm run build 2>/dev/null; then
-        BUILD_SUCCESS=1
-    fi
+    echo "[*] Building application..."
+    npm install && npm run build && BUILD_SUCCESS=1
 fi
 
 if [ "$BUILD_SUCCESS" -eq 0 ]; then
-    if [ -f "$DIR/dist/server.cjs" ] && [ -f "$DIR/dist/index.html" ]; then
-        echo "[+] Using pre-built production build artifacts from repository."
-    else
-        echo "[!] Build failed. Retrying with full log output..."
-        npm install
-        npm run build
-    fi
+    echo "[!] Fatal: Application build failed. Aborting installation." >&2
+    exit 1
 fi
 
 # Deploy to /opt/centium
@@ -142,7 +135,10 @@ cp -r "$DIR"/* /opt/centium/ 2>/dev/null || true
 if [ -d "$DIR/node_modules" ] && [ ! -d "/opt/centium/node_modules" ]; then
     cp -r "$DIR/node_modules" /opt/centium/
 fi
-chmod -R a+rwX /opt/centium
+# Secure /opt/centium: owned by root, non-world-writable
+chown -R root:root /opt/centium
+chmod -R go-w,a+rX /opt/centium
+chmod 755 /opt/centium/centium-desktop.sh 2>/dev/null || true
 
 # 6. Install Network Engine & Diagnostics Suite
 echo "[6/9] Installing centium-network and centium-diagnose..."
@@ -156,28 +152,40 @@ chmod 755 /usr/local/bin/centium-diagnose /usr/bin/centium-diagnose
 
 # 7. Sudoers rule so Centium can manage network engine without password prompts
 echo "[7/9] Configuring passwordless sudo rules (/etc/sudoers.d/centium)..."
-cat << 'EOF' > /etc/sudoers.d/centium
+SUDO_USER_TARGET="${REAL_USER:-ALL}"
+SUDO_TMP="/tmp/centium_sudoers.$$"
+
+cat << EOF > "$SUDO_TMP"
 Defaults env_keep += "CENTIUM_TOR_UID SOCKS5_PORT"
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-network
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-network *
-ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-network
-ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-network *
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-diagnose
-ALL ALL=(ALL) NOPASSWD: /usr/local/bin/centium-diagnose *
-ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-diagnose
-ALL ALL=(ALL) NOPASSWD: /usr/bin/centium-diagnose *
-ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl start centiumd
-ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop centiumd
-ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart centiumd
-ALL ALL=(ALL) NOPASSWD: /usr/bin/systemctl status centiumd
-ALL ALL=(ALL) NOPASSWD: /bin/systemctl start centiumd
-ALL ALL=(ALL) NOPASSWD: /bin/systemctl stop centiumd
-ALL ALL=(ALL) NOPASSWD: /bin/systemctl restart centiumd
-ALL ALL=(ALL) NOPASSWD: /bin/systemctl status centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/local/bin/centium-network
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/local/bin/centium-network *
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/centium-network
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/centium-network *
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/local/bin/centium-diagnose
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/local/bin/centium-diagnose *
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/centium-diagnose
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/centium-diagnose *
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /usr/bin/systemctl status centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /bin/systemctl start centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /bin/systemctl stop centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /bin/systemctl restart centiumd
+${SUDO_USER_TARGET} ALL=(ALL) NOPASSWD: /bin/systemctl status centiumd
 EOF
-chmod 440 /etc/sudoers.d/centium
+
+chmod 440 "$SUDO_TMP"
 if command -v visudo &>/dev/null; then
-    visudo -cf /etc/sudoers.d/centium || echo "[!] Notice: visudo validation on /etc/sudoers.d/centium"
+    if visudo -cf "$SUDO_TMP"; then
+        mv "$SUDO_TMP" /etc/sudoers.d/centium
+    else
+        echo "[!] Fatal: visudo validation failed on sudoers template" >&2
+        rm -f "$SUDO_TMP"
+        exit 1
+    fi
+else
+    mv "$SUDO_TMP" /etc/sudoers.d/centium
 fi
 
 # 8. Install Centium Daemon & Systemd Services
@@ -194,9 +202,7 @@ systemctl enable --now centiumd || echo "[!] Notice: centiumd service enabled"
 echo "[9/9] Installing Desktop Application Launcher and Icons..."
 cat << 'EOF' > /usr/bin/centium
 #!/usr/bin/env bash
-if [ -f "./centium-desktop.sh" ] && [ -f "./package.json" ]; then
-    exec "./centium-desktop.sh" "$@"
-elif [ -f "/opt/centium/centium-desktop.sh" ]; then
+if [ -f "/opt/centium/centium-desktop.sh" ]; then
     exec "/opt/centium/centium-desktop.sh" "$@"
 else
     DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"

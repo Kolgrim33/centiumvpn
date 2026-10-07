@@ -25,6 +25,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  const handleToggle = async (key: keyof CentiumConfig, val: boolean) => {
+    if (key === 'autoConnect') setAutoConnect(val);
+    if (key === 'startWithSystem') setStartWithSystem(val);
+    if (key === 'killSwitch') setKillSwitch(val);
+    if (key === 'dnsProtection') setDnsProtection(val);
+    if (key === 'blockIpv6') setBlockIpv6(val);
+
+    try {
+      await onSaveConfig({ [key]: val });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2000);
+    } catch (e) {
+      console.error('Failed to auto-save setting:', e);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -86,7 +102,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <input
               type="checkbox"
               checked={autoConnect}
-              onChange={(e) => setAutoConnect(e.target.checked)}
+              onChange={(e) => handleToggle('autoConnect', e.target.checked)}
               className="accent-[#6C4DFF] w-4 h-4 cursor-pointer"
             />
           </label>
@@ -99,7 +115,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <input
               type="checkbox"
               checked={startWithSystem}
-              onChange={(e) => setStartWithSystem(e.target.checked)}
+              onChange={(e) => handleToggle('startWithSystem', e.target.checked)}
               className="accent-[#6C4DFF] w-4 h-4 cursor-pointer"
             />
           </label>
@@ -133,7 +149,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <input
               type="checkbox"
               checked={killSwitch}
-              onChange={(e) => setKillSwitch(e.target.checked)}
+              onChange={(e) => handleToggle('killSwitch', e.target.checked)}
               className="accent-[#6C4DFF] w-4 h-4 cursor-pointer"
             />
           </label>
@@ -146,7 +162,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <input
               type="checkbox"
               checked={dnsProtection}
-              onChange={(e) => setDnsProtection(e.target.checked)}
+              onChange={(e) => handleToggle('dnsProtection', e.target.checked)}
               className="accent-[#6C4DFF] w-4 h-4 cursor-pointer"
             />
           </label>
@@ -159,7 +175,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <input
               type="checkbox"
               checked={blockIpv6}
-              onChange={(e) => setBlockIpv6(e.target.checked)}
+              onChange={(e) => handleToggle('blockIpv6', e.target.checked)}
               className="accent-[#6C4DFF] w-4 h-4 cursor-pointer"
             />
           </label>

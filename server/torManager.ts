@@ -40,6 +40,7 @@ export class TorManager {
   private watchdogTimer: NodeJS.Timeout | null = null;
   private isConnecting = false;
   private isCancelled = false;
+  private intentionalTorStop = false;
 
   private config: CentiumConfig = {
     exitLocation: 'auto',
@@ -56,15 +57,63 @@ export class TorManager {
     controlPort: 9051,
   };
 
+  private getConfigFileCandidates(): string[] {
+    return [
+      '/etc/centium/config.json',
+      '/var/lib/centium/config.json',
+      path.resolve(process.cwd(), 'config.json'),
+    ];
+  }
+
+  private loadConfigFromDisk(): void {
+    for (const filePath of this.getConfigFileCandidates()) {
+      if (fs.existsSync(filePath)) {
+        try {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            this.config = { ...this.config, ...parsed };
+            this.addLog(`[Config] Loaded persisted settings from ${filePath} (autoConnect: ${this.config.autoConnect})`);
+            return;
+          }
+        } catch (e: any) {
+          console.warn(`[Config] Error loading ${filePath}:`, e.message);
+        }
+      }
+    }
+  }
+
+  private saveConfigToDisk(): void {
+    let saved = false;
+    for (const filePath of this.getConfigFileCandidates()) {
+      try {
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(filePath, JSON.stringify(this.config, null, 2), { mode: 0o644 });
+        saved = true;
+        break;
+      } catch {}
+    }
+    if (!saved) {
+      try {
+        fs.writeFileSync('config.json', JSON.stringify(this.config, null, 2));
+      } catch {}
+    }
+  }
+
   constructor() {
     this.detectTorUser();
     this.ensureDirectories();
+    this.loadConfigFromDisk();
     // Emergency cleanup of any stale rules from prior crashes
     this.recoverStaleNetworkState().catch(() => {});
     if (this.config.autoConnect) {
+      this.addLog('[AutoConnect] Auto-connect enabled in settings. Initiating connection sequence...');
       setTimeout(() => {
         if (this.state === 'DISCONNECTED') {
-          this.connect().catch((err) => console.error('[AutoConnect]', err));
+          this.connect().catch((err) => console.error('[AutoConnect Error]', err));
         }
       }, 2000);
     }
@@ -314,7 +363,30 @@ export class TorManager {
     // Hard-code virtualInterface to centium0 to prevent any command injection
     this.config.virtualInterface = 'centium0';
 
-    this.addLog(`[Config] Configuration updated. Exit: ${this.config.exitLocation}, KillSwitch: ${this.config.killSwitch}`);
+    // Persist updated settings to disk
+    this.saveConfigToDisk();
+
+    // If currently connected, apply live toggles immediately
+    if (this.state === 'CONNECTED') {
+      if (typeof newConfig.killSwitch === 'boolean' || typeof newConfig.blockIpv6 === 'boolean') {
+        this.runNetworkAction('start-killswitch').catch((e) => {
+          this.addLog(`[Config] Live killswitch update notice: ${e.message}`);
+        });
+      }
+      if (typeof newConfig.dnsProtection === 'boolean') {
+        if (newConfig.dnsProtection) {
+          this.runNetworkAction('install-dns').catch((e) => {
+            this.addLog(`[Config] Live DNS install notice: ${e.message}`);
+          });
+        } else {
+          this.runNetworkAction('restore-dns').catch((e) => {
+            this.addLog(`[Config] Live DNS restore notice: ${e.message}`);
+          });
+        }
+      }
+    }
+
+    this.addLog(`[Config] Configuration updated and saved. Exit: ${this.config.exitLocation}, KillSwitch: ${this.config.killSwitch}`);
   }
 
   private generateTorrc(): string {
@@ -394,6 +466,7 @@ export class TorManager {
   }
 
   private killCentiumTorProcess() {
+    this.intentionalTorStop = true;
     // 1. Terminate spawned ChildProcess if present
     if (this.torProcess) {
       try {
@@ -458,6 +531,7 @@ export class TorManager {
     const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
 
     return new Promise((resolve, reject) => {
+      this.intentionalTorStop = false;
       this.torExitedPrematurely = false;
       this.lastExitCode = null;
       this.lastExitSignal = null;
@@ -520,10 +594,14 @@ export class TorManager {
       });
 
       child.on('close', (code, signal) => {
+        // Guard: if this child is not the current active Tor process, ignore the close event
+        if (this.torProcess !== child) {
+          return;
+        }
         this.lastExitCode = code;
         this.lastExitSignal = signal;
         this.addLog(`[Tor Process Exited] Code: ${code}, Signal: ${signal}`);
-        if (this.state !== 'DISCONNECTED' && this.state !== 'DISCONNECTING') {
+        if (!this.intentionalTorStop && this.state !== 'DISCONNECTED' && this.state !== 'DISCONNECTING') {
           this.torExitedPrematurely = true;
           this.handleUnexpectedTorExit(code, signal);
         }
@@ -663,34 +741,40 @@ export class TorManager {
 
     // 5. hev-socks5-tunnel process is running
     const pidFile = '/run/centium/hev-socks5-tunnel.pid';
+    let bridgeRunning = false;
     if (fs.existsSync(pidFile)) {
       try {
         const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim(), 10);
-        if (!pid || !process.kill(pid, 0)) {
-          throw new Error('PID not running');
+        if (pid && process.kill(pid, 0)) {
+          bridgeRunning = true;
+          this.addLog(`[Audit] ✓ TUN-to-SOCKS5 bridge process verified active (PID: ${pid}).`);
         }
-        this.addLog(`[Audit] ✓ TUN-to-SOCKS5 bridge process verified active (PID: ${pid}).`);
-      } catch {
-        throw new Error('Verification failed: TUN-to-SOCKS5 bridge process is not alive.');
-      }
+      } catch {}
+    }
+    if (!bridgeRunning) {
+      try {
+        execFileSync('pgrep', ['-f', 'hev-socks5-tunnel|tun2socks'], { stdio: 'ignore' });
+        bridgeRunning = true;
+        this.addLog('[Audit] ✓ TUN-to-SOCKS5 bridge process verified active via system process scan.');
+      } catch {}
+    }
+    if (!bridgeRunning) {
+      throw new Error('Verification failed: TUN-to-SOCKS5 bridge (hev-socks5-tunnel) process is not running.');
     }
 
-    // 6. Policy routing table 8420 exists
+    // 6. Policy routing table 8420 exists and has rule
     try {
       const routes = execFileSync('ip', ['route', 'show', 'table', '8420'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-      if (routes.includes('centium0')) {
-        this.addLog('[Audit] ✓ Policy routing table 8420 verified with default route via centium0.');
-      } else if (fs.existsSync('/run/centium/routing.status')) {
-        this.addLog('[Audit] ✓ TUN interface routing verified active.');
-      } else {
-        throw new Error('Default route in table 8420 missing');
+      const rules = execFileSync('ip', ['rule', 'show'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+      if (!routes.includes('centium0')) {
+        throw new Error('Default route dev centium0 in table 8420 is missing in kernel.');
       }
+      if (!rules.includes('8420')) {
+        throw new Error('Policy routing rule for lookup 8420 is missing in kernel.');
+      }
+      this.addLog('[Audit] ✓ Policy routing table 8420 verified with default route via centium0.');
     } catch (err: any) {
-      if (fs.existsSync('/run/centium/routing.status')) {
-        this.addLog('[Audit] ✓ TUN interface routing verified active.');
-      } else {
-        throw new Error(`Verification failed: Policy routing table 8420 not configured (${err.message}).`);
-      }
+      throw new Error(`Verification failed: Policy routing table 8420 audit failed (${err.message}).`);
     }
 
     // 7. nftables kill switch exists in kernel
@@ -708,14 +792,26 @@ export class TorManager {
       throw new Error(`Verification failed: nftables kill switch audit failed (${err.message}). Never falling back to unverified state.`);
     }
 
-    // 8. DNS resolver uses mapped-DNS
+    // 8. DNS resolver uses mapped-DNS (198.18.0.2)
+    let dnsVerified = false;
     if (fs.existsSync('/etc/resolv.conf')) {
       const resolv = fs.readFileSync('/etc/resolv.conf', 'utf-8');
       if (resolv.includes('198.18.0.2')) {
-        this.addLog('[Audit] ✓ System DNS verified pointing to mapped-DNS 198.18.0.2.');
-      } else {
-        this.addLog('[Audit] ✓ System DNS active.');
+        dnsVerified = true;
+        this.addLog('[Audit] ✓ System DNS verified pointing to mapped-DNS 198.18.0.2 in /etc/resolv.conf.');
       }
+    }
+    if (!dnsVerified) {
+      try {
+        const out = execFileSync('resolvectl', ['dns', 'centium0'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+        if (out.includes('198.18.0.2')) {
+          dnsVerified = true;
+          this.addLog('[Audit] ✓ systemd-resolved verified pointing to mapped-DNS 198.18.0.2 on centium0.');
+        }
+      } catch {}
+    }
+    if (!dnsVerified) {
+      throw new Error('Verification failed: System DNS does not point to Centium mapped-DNS (198.18.0.2). Traffic would leak or fail to resolve.');
     }
 
     // 9. End-to-end TCP connection through Tor
@@ -984,33 +1080,26 @@ export class TorManager {
       });
     };
 
+    // Real end-to-end test through the TUN interface (centium0).
+    // NEVER fall back to Tor's SOCKS port, as that would mask broken host routing or TUN failure!
     let result = await checkDirect();
     if (!result) {
-      result = await checkSocks();
-    }
-
-    if (!result) {
-      // Fallback query to icanhazip, but strictly require Tor verification via Onionoo
-      const fallbackIp = await new Promise<string | null>((resolve) => {
-        execFile('curl', ['-s', '--connect-timeout', '6', '--socks5-hostname', `127.0.0.1:${this.config.socksPort}`, 'https://icanhazip.com'], (err, stdout) => {
-          if (!err && stdout && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(stdout.trim())) {
-            resolve(stdout.trim());
-          } else {
-            resolve(null);
-          }
-        });
-      });
-
-      if (fallbackIp) {
-        const isTorRelay = await checkOnionoo(fallbackIp);
-        if (isTorRelay) {
-          result = { ip: fallbackIp, isTor: true };
-        }
-      }
+      this.addLog('[Audit] TUN exit verification pending, retrying in 1.5s...');
+      await this.sleep(1500);
+      result = await checkDirect();
     }
 
     if (!result || !result.isTor) {
-      throw new Error('Tor exit verification failed: Unable to confirm legitimate, active Tor exit connection.');
+      // Diagnostic check: test SOCKS port only to give precise troubleshooting advice
+      const socksDiag = await checkSocks();
+      if (socksDiag && socksDiag.isTor) {
+        throw new Error(
+          'Tunnel routing failure: Tor daemon is active on SOCKS5, but host traffic is NOT reaching Tor via centium0 / table 8420. The tunnel is broken and traffic cannot pass.'
+        );
+      }
+      throw new Error(
+        'Tor exit verification through tunnel (centium0) failed: Unable to route traffic through the tunnel to the Tor network.'
+      );
     }
 
     const country = await this.resolveExitCountry(result.ip);

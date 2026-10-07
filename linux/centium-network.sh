@@ -92,22 +92,35 @@ log_err() {
 install_killswitch() {
     log "Installing fail-closed nftables kill switch (table ${NFT_FAMILY} ${NFT_TABLE})..."
     mkdir -p "$RUNTIME_DIR"
-    chmod 777 "$RUNTIME_DIR" 2>/dev/null || true
+    chmod 775 "$RUNTIME_DIR" 2>/dev/null || true
+
+    if [ -z "$NFT_CMD" ]; then
+        log_err "nft command not found! nftables is required for fail-closed kill switch."
+        return 1
+    fi
 
     # Define atomic ruleset for table inet centium:
     # - Default drop on output, input, and forward
     # - Allow loopback
     # - Allow Tor's own process by UID to reach physical network (with route mark)
     # - Allow established/related traffic
-    # - Allow traffic leaving or entering centium0
+    # - Use iifname/oifname so rules match by interface name and do not fail if centium0 index does not exist yet
+    # - Allow DHCP (UDP 67/68) and NTP (UDP 123) so leases renew and clock stays synchronized
+    # - Fast-reject unsupported UDP with port-unreachable so apps fail fast
     # - Route hook sets mark 0x8420 on Tor's own packets so policy routing bypasses table 8420
+    local block_ipv6_rule=""
+    if [ "${CENTIUM_BLOCK_IPV6:-1}" = "0" ]; then
+        block_ipv6_rule="meta nfproto ipv6 accept"
+    fi
+
     local nft_ruleset
     nft_ruleset="table ${NFT_FAMILY} ${NFT_TABLE} {
     chain inbound {
         type filter hook input priority filter; policy drop;
         iif \"lo\" accept
         ct state established,related accept
-        iif \"${TUN_DEV}\" accept
+        iifname \"${TUN_DEV}\" accept
+        udp sport 67 udp dport 68 accept
     }
 
     chain forward {
@@ -119,7 +132,11 @@ install_killswitch() {
         oif \"lo\" accept
         ct state established,related accept
         skuid ${TOR_NUMERIC_UID} accept
-        oif \"${TUN_DEV}\" accept
+        oifname \"${TUN_DEV}\" accept
+        udp sport 68 udp dport 67 accept
+        udp dport 123 accept
+        ${block_ipv6_rule}
+        meta l4proto udp reject with icmpx type port-unreachable
     }
 
     chain route_hook {
@@ -128,24 +145,18 @@ install_killswitch() {
     }
 }"
 
-    local kernel_nft_applied=0
-    if [ -n "$NFT_CMD" ]; then
-        if echo "$nft_ruleset" | "$NFT_CMD" -f - 2>/dev/null; then
-            kernel_nft_applied=1
-            echo "active_kernel" > "${RUNTIME_DIR}/killswitch.status"
-            log "✓ Fail-closed nftables kill switch active in kernel."
-        fi
-    fi
-
-    if [ "$kernel_nft_applied" -eq 0 ]; then
-        echo "active_software" > "${RUNTIME_DIR}/killswitch.status"
-        log "✓ Fail-closed kill switch policy active."
+    # Load ruleset into kernel atomically
+    if echo "$nft_ruleset" | "$NFT_CMD" -f -; then
+        log "✓ Fail-closed nftables kill switch active in kernel (iifname/oifname ${TUN_DEV})."
+        return 0
+    else
+        log_err "Failed to load nftables ruleset into kernel! Aborting connection."
+        return 1
     fi
 }
 
 remove_killswitch() {
     log "Removing nftables table ${NFT_FAMILY} ${NFT_TABLE}..."
-    rm -f "${RUNTIME_DIR}/killswitch.status" 2>/dev/null || true
     if [ -n "$NFT_CMD" ]; then
         "$NFT_CMD" delete table "${NFT_FAMILY}" "${NFT_TABLE}" 2>/dev/null || true
     fi
@@ -297,7 +308,7 @@ install_routing() {
     log "Installing policy routing for ${TUN_DEV} in table ${ROUTING_TABLE}..."
 
     if [ -z "$IP_CMD" ]; then
-        log_err "ip command not found!"
+        log_err "ip command not found! iproute2 is required for policy routing."
         return 1
     fi
 
@@ -308,33 +319,28 @@ install_routing() {
     "$IP_CMD" rule del lookup "$ROUTING_TABLE" 2>/dev/null || true
     "$IP_CMD" route flush table "$ROUTING_TABLE" 2>/dev/null || true
 
-    local table_applied=0
-
     # Default route for table 8420 goes through centium0
-    if "$IP_CMD" route add default dev "$TUN_DEV" table "$ROUTING_TABLE" 2>/dev/null; then
-        # Route Tor's own process to main table (so it uses physical eth/wifi directly)
-        "$IP_CMD" rule add fwmark "$FWMARK" lookup main pref 8418 2>/dev/null || true
-        "$IP_CMD" rule add uidrange "${TOR_NUMERIC_UID}-${TOR_NUMERIC_UID}" lookup main pref 8419 2>/dev/null || true
-
-        # Direct all other system traffic to table 8420
-        if "$IP_CMD" rule add not fwmark "$FWMARK" lookup "$ROUTING_TABLE" pref 8420 2>/dev/null; then
-            table_applied=1
-            echo "active_kernel" > "${RUNTIME_DIR}/routing.status"
-            log "✓ Policy routing installed (table ${ROUTING_TABLE}, Tor UID ${TOR_NUMERIC_UID} bypassed)."
-        fi
+    if ! "$IP_CMD" route add default dev "$TUN_DEV" table "$ROUTING_TABLE"; then
+        log_err "Failed to add default route dev ${TUN_DEV} to table ${ROUTING_TABLE}!"
+        return 1
     fi
 
-    if [ "$table_applied" -eq 0 ]; then
-        # Direct tunnel scope fallback for environments with single routing table
-        "$IP_CMD" route add 198.18.0.0/15 dev "$TUN_DEV" 2>/dev/null || true
-        echo "active_direct" > "${RUNTIME_DIR}/routing.status"
-        log "✓ TUN interface routing active for ${TUN_DEV}."
+    # Route Tor's own process to main table (so it uses physical eth/wifi directly)
+    "$IP_CMD" rule add fwmark "$FWMARK" lookup main pref 8418
+    "$IP_CMD" rule add uidrange "${TOR_NUMERIC_UID}-${TOR_NUMERIC_UID}" lookup main pref 8419
+
+    # Direct all other system traffic to table 8420
+    if ! "$IP_CMD" rule add not fwmark "$FWMARK" lookup "$ROUTING_TABLE" pref 8420; then
+        log_err "Failed to add policy routing rule (pref 8420) to table ${ROUTING_TABLE}!"
+        return 1
     fi
+
+    log "✓ Policy routing installed (table ${ROUTING_TABLE}, Tor UID ${TOR_NUMERIC_UID} bypassed)."
+    return 0
 }
 
 remove_routing() {
     log "Removing policy routing rules and flushing table ${ROUTING_TABLE}..."
-    rm -f "${RUNTIME_DIR}/routing.status" 2>/dev/null || true
     if [ -n "$IP_CMD" ]; then
         "$IP_CMD" rule del pref 8418 2>/dev/null || true
         "$IP_CMD" rule del pref 8419 2>/dev/null || true
@@ -353,6 +359,14 @@ remove_routing() {
 install_dns() {
     log "Configuring system DNS to use Centium mapped-DNS (${DNS_MAPPED_IP})..."
     mkdir -p "$RUNTIME_DIR"
+    chmod 775 "$RUNTIME_DIR" 2>/dev/null || true
+
+    # Configure systemd-resolved on centium0 interface if resolvectl is present
+    if command -v resolvectl &>/dev/null; then
+        resolvectl dns "${TUN_DEV}" "${DNS_MAPPED_IP}" 2>/dev/null || true
+        resolvectl domain "${TUN_DEV}" "~." 2>/dev/null || true
+        resolvectl default-route "${TUN_DEV}" true 2>/dev/null || true
+    fi
 
     # Check if resolv.conf is a symlink (systemd-resolved, etc.)
     if [ -L /etc/resolv.conf ]; then
@@ -386,6 +400,10 @@ EOF
 
 restore_dns() {
     log "Restoring system DNS configuration..."
+    if command -v resolvectl &>/dev/null; then
+        resolvectl revert "${TUN_DEV}" 2>/dev/null || true
+    fi
+
     if [ -f "$RESOLV_BACKUP" ]; then
         # If original was a symlink to systemd-resolved stub
         if [ -f "$ORIG_RESOLV_TARGET" ]; then
@@ -403,7 +421,7 @@ restore_dns() {
         rm -f "$RESOLV_BACKUP"
     fi
 
-    # If dhcpcd or systemd-resolved is active, notify them
+    # If systemd-resolved is active, notify it
     if command -v systemctl &>/dev/null; then
         if systemctl is-active systemd-resolved &>/dev/null; then
             systemctl restart systemd-resolved 2>/dev/null || true
@@ -502,40 +520,42 @@ verify_status() {
         errors=$((errors + 1))
     fi
 
-    # 3. Check nftables kill switch
-    if [ -n "$NFT_CMD" ] && [ -f "${RUNTIME_DIR}/killswitch.status" ] && grep -q "active_kernel" "${RUNTIME_DIR}/killswitch.status" 2>/dev/null; then
-        if ! "$NFT_CMD" list table "${NFT_FAMILY}" "${NFT_TABLE}" &>/dev/null; then
-            log_err "Verification failed: nftables table ${NFT_FAMILY} ${NFT_TABLE} does not exist!"
+    # 3. Check nftables kill switch (real kernel check, no marker file!)
+    if [ -n "$NFT_CMD" ]; then
+        if ! "$NFT_CMD" list table "${NFT_FAMILY}" "${NFT_TABLE}" 2>/dev/null | grep -q "chain outbound"; then
+            log_err "Verification failed: nftables table ${NFT_FAMILY} ${NFT_TABLE} does not exist in kernel!"
             errors=$((errors + 1))
         fi
-    elif [ ! -f "${RUNTIME_DIR}/killswitch.status" ]; then
-        log_err "Verification failed: kill switch status marker missing!"
+    else
+        log_err "Verification failed: nft command missing!"
         errors=$((errors + 1))
     fi
 
-    # 4. Check routing table 8420 and rule
+    # 4. Check routing table 8420 and rule (real iproute check, no marker file!)
     if [ -n "$IP_CMD" ]; then
-        if [ -f "${RUNTIME_DIR}/routing.status" ] && grep -q "active_kernel" "${RUNTIME_DIR}/routing.status" 2>/dev/null; then
-            if ! "$IP_CMD" route show table "$ROUTING_TABLE" | grep -q "$TUN_DEV"; then
-                log_err "Verification failed: default route in table ${ROUTING_TABLE} is missing!"
-                errors=$((errors + 1))
-            fi
-            if ! "$IP_CMD" rule show | grep -q "lookup ${ROUTING_TABLE}"; then
-                log_err "Verification failed: policy rule for table ${ROUTING_TABLE} is missing!"
-                errors=$((errors + 1))
-            fi
-        elif ! "$IP_CMD" link show "$TUN_DEV" 2>/dev/null | grep -E -q "(UP|UNKNOWN)"; then
-            log_err "Verification failed: TUN device ${TUN_DEV} is not active!"
+        if ! "$IP_CMD" route show table "$ROUTING_TABLE" 2>/dev/null | grep -q "$TUN_DEV"; then
+            log_err "Verification failed: default route in table ${ROUTING_TABLE} dev ${TUN_DEV} is missing!"
             errors=$((errors + 1))
         fi
+        if ! "$IP_CMD" rule show 2>/dev/null | grep -q "lookup ${ROUTING_TABLE}"; then
+            log_err "Verification failed: policy rule for table ${ROUTING_TABLE} is missing!"
+            errors=$((errors + 1))
+        fi
+    else
+        log_err "Verification failed: ip command missing!"
+        errors=$((errors + 1))
     fi
 
     # 5. Check DNS resolver
-    if [ -f /etc/resolv.conf ]; then
-        if ! grep -q "${DNS_MAPPED_IP}" /etc/resolv.conf; then
-            log_err "Verification failed: /etc/resolv.conf does not point to ${DNS_MAPPED_IP}!"
-            errors=$((errors + 1))
-        fi
+    local dns_pointing=0
+    if [ -f /etc/resolv.conf ] && grep -q "${DNS_MAPPED_IP}" /etc/resolv.conf 2>/dev/null; then
+        dns_pointing=1
+    elif command -v resolvectl &>/dev/null && resolvectl dns "${TUN_DEV}" 2>/dev/null | grep -q "${DNS_MAPPED_IP}"; then
+        dns_pointing=1
+    fi
+    if [ "$dns_pointing" -eq 0 ]; then
+        log_err "Verification failed: System resolver does not point to ${DNS_MAPPED_IP}!"
+        errors=$((errors + 1))
     fi
 
     if [ "$errors" -gt 0 ]; then

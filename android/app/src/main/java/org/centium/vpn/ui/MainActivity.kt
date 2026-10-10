@@ -1,8 +1,12 @@
 package org.centium.vpn.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -58,6 +62,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         observeServiceStatus()
+        requestNotificationPermission()
+    }
+
+    /** The VPN status notification is silently hidden on Android 13+ without this. */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_REQUEST_CODE)
+        }
     }
 
     private fun loadFragment(fragment: Fragment) {
@@ -72,22 +86,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeServiceStatus() {
         lifecycleScope.launch {
-            while (true) {
-                val service = CentiumVpnService.activeServiceInstance
-                if (service != null) {
-                    service.connectionState.collectLatest { state ->
-                        binding.headerStatusBadge.text = state.name
-                        val color = when (state) {
-                            ConnectionState.CONNECTED -> getColor(R.color.status_connected)
-                            ConnectionState.ERROR -> getColor(R.color.status_error)
-                            ConnectionState.DISCONNECTED -> getColor(R.color.status_disconnected)
-                            else -> getColor(R.color.status_connecting)
-                        }
-                        binding.headerStatusBadge.setTextColor(color)
-                    }
-                    break
+            CentiumVpnService.connectionState.collectLatest { state ->
+                binding.headerStatusBadge.text = state.name
+                val color = when (state) {
+                    ConnectionState.CONNECTED -> getColor(R.color.status_connected)
+                    ConnectionState.ERROR -> getColor(R.color.status_error)
+                    ConnectionState.DISCONNECTED -> getColor(R.color.status_disconnected)
+                    else -> getColor(R.color.status_connecting)
                 }
-                kotlinx.coroutines.delay(1000)
+                binding.headerStatusBadge.setTextColor(color)
             }
         }
     }
@@ -97,11 +104,14 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == VPN_PREPARE_REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK) {
                 vpnManager.startVpnService()
+            } else {
+                Toast.makeText(this, "VPN permission is required to route traffic through Tor.", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     companion object {
         const val VPN_PREPARE_REQUEST_CODE = 8421
+        private const val NOTIFICATION_REQUEST_CODE = 8422
     }
 }

@@ -10,17 +10,14 @@ class PreferencesRepository(context: Context) {
     fun getConfig(): CentiumConfig {
         return CentiumConfig(
             exitLocation = prefs.getString(KEY_EXIT_LOCATION, "auto") ?: "auto",
-            bridgeMode = BridgeMode.valueOf(prefs.getString(KEY_BRIDGE_MODE, BridgeMode.AUTO.name) ?: BridgeMode.AUTO.name),
-            bridgeType = BridgeType.valueOf(prefs.getString(KEY_BRIDGE_TYPE, BridgeType.NONE.name) ?: BridgeType.NONE.name),
+            bridgeMode = BridgeMode.entries.firstOrNull { it.name == prefs.getString(KEY_BRIDGE_MODE, null) } ?: BridgeMode.AUTO,
+            bridgeType = BridgeType.entries.firstOrNull { it.name == prefs.getString(KEY_BRIDGE_TYPE, null) } ?: BridgeType.NONE,
             customBridges = prefs.getString(KEY_CUSTOM_BRIDGES, "") ?: "",
             killSwitch = prefs.getBoolean(KEY_KILL_SWITCH, true),
             blockIpv6 = prefs.getBoolean(KEY_BLOCK_IPV6, true),
             autoConnect = prefs.getBoolean(KEY_AUTO_CONNECT, false),
             dnsProtection = prefs.getBoolean(KEY_DNS_PROTECTION, true),
-            socksPort = prefs.getInt(KEY_SOCKS_PORT, 9050),
-            controlPort = prefs.getInt(KEY_CONTROL_PORT, 9051),
-            dnsPort = prefs.getInt(KEY_DNS_PORT, 9053),
-            connectionTimeoutSeconds = prefs.getInt(KEY_TIMEOUT, 60),
+            connectionTimeoutSeconds = prefs.getInt(KEY_TIMEOUT, 120),
             disallowPackages = prefs.getStringSet(KEY_DISALLOWED_PKGS, emptySet()) ?: emptySet()
         )
     }
@@ -35,9 +32,6 @@ class PreferencesRepository(context: Context) {
             .putBoolean(KEY_BLOCK_IPV6, config.blockIpv6)
             .putBoolean(KEY_AUTO_CONNECT, config.autoConnect)
             .putBoolean(KEY_DNS_PROTECTION, config.dnsProtection)
-            .putInt(KEY_SOCKS_PORT, config.socksPort)
-            .putInt(KEY_CONTROL_PORT, config.controlPort)
-            .putInt(KEY_DNS_PORT, config.dnsPort)
             .putInt(KEY_TIMEOUT, config.connectionTimeoutSeconds)
             .putStringSet(KEY_DISALLOWED_PKGS, config.disallowPackages)
             .apply()
@@ -53,9 +47,6 @@ class PreferencesRepository(context: Context) {
         private const val KEY_BLOCK_IPV6 = "block_ipv6"
         private const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_DNS_PROTECTION = "dns_protection"
-        private const val KEY_SOCKS_PORT = "socks_port"
-        private const val KEY_CONTROL_PORT = "control_port"
-        private const val KEY_DNS_PORT = "dns_port"
         private const val KEY_TIMEOUT = "connection_timeout"
         private const val KEY_DISALLOWED_PKGS = "disallowed_packages"
     }

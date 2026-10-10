@@ -4,6 +4,7 @@ import android.content.Context
 import hev.htproxy.TProxyService
 import java.io.File
 import org.centium.vpn.data.CentiumConfig
+import org.centium.vpn.vpn.TunConfiguration
 
 class HevTunnelBridge(
     private val context: Context,
@@ -12,31 +13,42 @@ class HevTunnelBridge(
     private var isRunning = false
     private val configFile: File by lazy { File(context.filesDir, "hev-socks5-tunnel.yml") }
 
-    fun startBridge(tunFd: Int, config: CentiumConfig): Boolean {
+    fun startBridge(tunFd: Int, socksPort: Int, config: CentiumConfig): Boolean {
         onLog("[Bridge] Generating native TUN-to-SOCKS5 bridge configuration...")
 
+        // Without an IPv6 address on the netif, lwIP drops IPv6 packets (block mode)
+        val ipv6Line = if (config.blockIpv6) "" else "\n  ipv6: '${TunConfiguration.TUN_IPV6}'"
+
+        // Tor's SOCKS port has no UDP ASSOCIATE, so non-DNS UDP fails closed.
+        // DNS is answered by mapdns with fake IPs; connections to those are sent
+        // to Tor as SOCKS5 hostname requests, so lookups never leave via the ISP.
         val yaml = """
-            tunnel:
-              mtu: 1500
-              ipv4: 198.18.0.1
-              ipv6: "fc00::1"
+tunnel:
+  mtu: ${TunConfiguration.MTU}
+  ipv4: ${TunConfiguration.TUN_IPV4}$ipv6Line
 
-            socks5:
-              port: ${config.socksPort}
-              address: 127.0.0.1
-              udp: 'udp'
+socks5:
+  port: $socksPort
+  address: 127.0.0.1
+  udp: 'udp'
 
-            misc:
-              task-stack-size: 81920
-              connect-timeout: 30000
-              read-write-timeout: 60000
-              log-level: warn
-              limit-nofile: 65535
-        """.trimIndent()
+mapdns:
+  address: ${TunConfiguration.MAPDNS_ADDRESS}
+  port: 53
+  network: 100.64.0.0
+  netmask: 255.192.0.0
+  cache-size: 10000
+
+misc:
+  task-stack-size: 81920
+  connect-timeout: 30000
+  tcp-read-write-timeout: 300000
+  log-level: warn
+"""
 
         configFile.writeText(yaml)
 
-        onLog("[Bridge] Starting TProxyService on TUN fd: $tunFd...")
+        onLog("[Bridge] Starting TProxyService on TUN fd: $tunFd -> SOCKS 127.0.0.1:$socksPort")
         return try {
             val started = TProxyService.TProxyStartService(configFile.absolutePath, tunFd)
             isRunning = started
@@ -65,7 +77,7 @@ class HevTunnelBridge(
         return try {
             TProxyService.TProxyIsRunning()
         } catch (_: Throwable) {
-            isRunning
+            false
         }
     }
 

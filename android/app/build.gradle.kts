@@ -1,11 +1,15 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "org.centium.vpn"
-    compileSdk = 34
+    // tor-android 0.4.9.x declares minCompileSdk 37.1; targetSdk (runtime behavior) stays 34
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
 
     defaultConfig {
         applicationId = "org.centium.vpn"
@@ -21,9 +25,18 @@ android {
         }
 
         externalNativeBuild {
-            cmake {
-                arguments("-DANDROID_STL=c++_static")
+            ndkBuild {
+                // Only the JNI library; upstream also defines a standalone binary
+                targets("hev-socks5-tunnel")
             }
+        }
+    }
+
+    ndkVersion = "26.3.11579264"
+
+    externalNativeBuild {
+        ndkBuild {
+            path = file("src/main/jni/Android.mk")
         }
     }
 
@@ -45,10 +58,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -75,6 +84,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // Tor daemon (libtor.so + TorService) and its control-protocol client
+    implementation("info.guardianproject:tor-android:0.4.9.14")
+    implementation("info.guardianproject:jtorctl:0.4.5.7")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

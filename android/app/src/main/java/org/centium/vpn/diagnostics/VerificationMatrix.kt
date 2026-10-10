@@ -6,127 +6,105 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 
+/**
+ * Verifies the exit through Tor's SOCKS port — the same path hev-socks5-tunnel
+ * forwards TUN traffic to. Centium's own process is excluded from the VPN (to
+ * keep Tor's relay connections out of the tunnel), so a plain request from here
+ * would bypass Tor and always see the real IP.
+ */
 class VerificationMatrix {
 
-    private val directClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    suspend fun verifyTunnelTraffic(socksPort: Int, attempts: Int = 3): VerificationResult =
+        withContext(Dispatchers.IO) {
+            if (socksPort <= 0) return@withContext VerificationResult.FAILED
 
-    suspend fun verifyTunnelTraffic(socksPort: Int): VerificationResult = withContext(Dispatchers.IO) {
-        // 1. Primary check: check.torproject.org API directly through the active tunnel
-        try {
+            val client = torClient(socksPort)
+            repeat(attempts) { attempt ->
+                checkTorProject(client)?.let { ip ->
+                    val (country, code) = resolveCountry(client, ip)
+                    return@withContext VerificationResult(true, ip, country, code)
+                }
+                if (attempt < attempts - 1) delay(2000)
+            }
+            VerificationResult.FAILED
+        }
+
+    private fun torClient(socksPort: Int): OkHttpClient {
+        // OkHttp leaves hostnames unresolved for SOCKS proxies, so Tor resolves them
+        val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
+        return OkHttpClient.Builder()
+            .proxy(proxy)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /** Returns the exit IP if check.torproject.org confirms it is a Tor exit. */
+    private suspend fun checkTorProject(client: OkHttpClient): String? {
+        return try {
             val req = Request.Builder()
                 .url("https://check.torproject.org/api/ip")
                 .header("User-Agent", "Centium-Android/1.0")
                 .build()
-
-            directClient.newCall(req).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string()
-                    if (body != null) {
-                        val json = Gson().fromJson(body, JsonObject::class.java)
-                        val isTor = json.get("IsTor")?.asBoolean ?: false
-                        val ip = json.get("IP")?.asString
-
-                        if (isTor && ip != null) {
-                            val countryInfo = resolveCountry(ip, socksPort)
-                            return@withContext VerificationResult(
-                                isTor = true,
-                                ip = ip,
-                                country = countryInfo.first,
-                                countryCode = countryInfo.second
-                            )
-                        }
-                    }
-                }
+            client.newCall(req).await().use { response ->
+                if (!response.isSuccessful) return null
+                val json = Gson().fromJson(response.body?.string(), JsonObject::class.java)
+                val isTor = json?.get("IsTor")?.asBoolean ?: false
+                val ip = json?.get("IP")?.asString
+                if (isTor) ip else null
             }
-        } catch (_: Exception) {}
-
-        // 2. Secondary check: icanhazip validated against Onionoo Tor directory
-        try {
-            val req = Request.Builder()
-                .url("https://icanhazip.com")
-                .header("User-Agent", "Centium-Android/1.0")
-                .build()
-
-            directClient.newCall(req).execute().use { response ->
-                if (response.isSuccessful) {
-                    val directIp = response.body?.string()?.trim()
-                    if (directIp != null && directIp.matches(Regex("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"))) {
-                        val isRelay = checkOnionoo(directIp, socksPort)
-                        if (isRelay) {
-                            val countryInfo = resolveCountry(directIp, socksPort)
-                            return@withContext VerificationResult(
-                                isTor = true,
-                                ip = directIp,
-                                country = countryInfo.first,
-                                countryCode = countryInfo.second
-                            )
-                        }
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-
-        VerificationResult(isTor = false, ip = null, country = null, countryCode = null)
-    }
-
-    private fun checkOnionoo(ip: String, socksPort: Int): Boolean {
-        return try {
-            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
-            val client = OkHttpClient.Builder()
-                .proxy(proxy)
-                .connectTimeout(6, TimeUnit.SECONDS)
-                .readTimeout(8, TimeUnit.SECONDS)
-                .build()
-
-            val req = Request.Builder()
-                .url("https://onionoo.torproject.org/details?search=$ip&type=relay")
-                .build()
-
-            client.newCall(req).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    val body = resp.body?.string() ?: ""
-                    body.contains(ip)
-                } else false
-            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
-            false
+            null
         }
     }
 
-    private fun resolveCountry(ip: String, socksPort: Int): Pair<String, String> {
+    private suspend fun resolveCountry(client: OkHttpClient, ip: String): Pair<String, String> {
         return try {
-            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
-            val client = OkHttpClient.Builder()
-                .proxy(proxy)
-                .connectTimeout(5, TimeUnit.SECONDS)
-                .build()
-
-            val req = Request.Builder()
-                .url("https://ipwho.is/$ip")
-                .build()
-
-            client.newCall(req).execute().use { resp ->
+            val req = Request.Builder().url("https://ipwho.is/$ip").build()
+            client.newCall(req).await().use { resp ->
                 if (resp.isSuccessful) {
-                    val body = resp.body?.string() ?: ""
-                    val json = Gson().fromJson(body, JsonObject::class.java)
-                    val country = json.get("country")?.asString ?: "Tor Relay"
-                    val code = json.get("country_code")?.asString ?: "--"
+                    val json = Gson().fromJson(resp.body?.string(), JsonObject::class.java)
+                    val country = json?.get("country")?.asString ?: "Tor Relay"
+                    val code = json?.get("country_code")?.asString ?: "--"
                     country to code
                 } else {
                     "Tor Relay" to "--"
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             "Tor Relay" to "--"
         }
+    }
+
+    /** Async call that is cancelled with the coroutine (blocking execute() is not). */
+    private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+        cont.invokeOnCancellation { cancel() }
+        enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                cont.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                cont.resume(response)
+            }
+        })
     }
 
     data class VerificationResult(
@@ -134,5 +112,9 @@ class VerificationMatrix {
         val ip: String?,
         val country: String?,
         val countryCode: String?
-    )
+    ) {
+        companion object {
+            val FAILED = VerificationResult(false, null, null, null)
+        }
+    }
 }

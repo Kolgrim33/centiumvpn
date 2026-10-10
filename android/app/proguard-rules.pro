@@ -15,3 +15,7 @@
 # OkHttp rules
 -dontwarn okhttp3.**
 -dontwarn okio.**
+
+# Tor: TorService is started by class name and libtor.so calls back into it via JNI
+-keep class org.torproject.jni.** { *; }
+-keep class net.freehaven.tor.control.** { *; }

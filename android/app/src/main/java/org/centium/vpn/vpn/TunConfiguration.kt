@@ -12,44 +12,38 @@ class TunConfiguration {
     ): ParcelFileDescriptor? {
         val builder = service.Builder().apply {
             setSession("Centium VPN")
-            setMtu(1500)
+            setMtu(MTU)
 
-            // IPv4 Virtual Address & Default Routing Table
-            addAddress("198.18.0.1", 15)
+            // Capture all IPv4 traffic
+            addAddress(TUN_IPV4, 32)
             addRoute("0.0.0.0", 0)
 
-            // DNS: Point to local loopback (intercepted & routed to Tor DNSPort 9053)
-            addDnsServer("127.0.0.1")
+            // Always capture IPv6 too so it can never bypass the tunnel. Whether it
+            // is forwarded to Tor or dropped is decided by the bridge config.
+            addAddress(TUN_IPV6, 128)
+            addRoute("::", 0)
 
-            // IPv6 Handling
-            if (!config.blockIpv6) {
-                try {
-                    addAddress("fc00::1", 128)
-                    addRoute("::", 0)
-                } catch (_: Exception) {}
-            } else {
-                // Route IPv6 into blackhole / drop path to prevent direct IPv6 egress leak
-                try {
-                    addAddress("2001:db8::1", 128)
-                    addRoute("2000::", 3)
-                } catch (_: Exception) {}
-            }
+            // DNS goes to a virtual resolver inside the tunnel (hev mapdns), which
+            // hands hostnames to Tor so resolution happens at the exit relay.
+            addDnsServer(MAPDNS_ADDRESS)
 
-            // Exclude Centium's own process from VPN to protect Tor's upstream relay connections
-            try {
-                addDisallowedApplication(service.packageName)
-            } catch (_: Exception) {}
+            // Exclude Centium's own process so Tor's relay connections don't loop
+            addDisallowedApplication(service.packageName)
 
-            // Per-app routing if configured
             for (pkg in config.disallowPackages) {
                 try {
                     addDisallowedApplication(pkg)
                 } catch (_: Exception) {}
             }
-
-            setBlocking(false)
         }
 
         return builder.establish()
+    }
+
+    companion object {
+        const val MTU = 8500
+        const val TUN_IPV4 = "198.18.0.1"
+        const val TUN_IPV6 = "fc00::1"
+        const val MAPDNS_ADDRESS = "198.18.0.2"
     }
 }

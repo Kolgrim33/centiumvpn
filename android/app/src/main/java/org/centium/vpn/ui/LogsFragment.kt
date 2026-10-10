@@ -28,10 +28,8 @@ class LogsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val service = CentiumVpnService.activeServiceInstance ?: return
-
         viewLifecycleOwner.lifecycleScope.launch {
-            service.logs.collectLatest { logEntries ->
+            CentiumVpnService.logs.collectLatest { logEntries ->
                 if (logEntries.isNotEmpty()) {
                     binding.tvLogOutput.text = logEntries.joinToString("\n")
                     binding.scrollLogs.post {

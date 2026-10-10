@@ -1,14 +1,16 @@
 package org.centium.vpn.notifications
 
+import android.annotation.SuppressLint
+import android.app.PendingIntent
+import android.content.Intent
+import android.net.VpnService
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import androidx.annotation.RequiresApi
-import org.centium.vpn.CentiumApplication
 import org.centium.vpn.data.ConnectionState
+import org.centium.vpn.ui.MainActivity
 import org.centium.vpn.vpn.CentiumVpnService
 
-@RequiresApi(Build.VERSION_CODES.N)
 class CentiumTileService : TileService() {
 
     override fun onStartListening() {
@@ -18,36 +20,52 @@ class CentiumTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val service = CentiumVpnService.activeServiceInstance
-        val isConnected = service?.connectionState?.value?.isConnected == true
+        val state = CentiumVpnService.connectionState.value
 
-        if (isConnected) {
+        if (state.isConnected || state.isTransitioning || CentiumVpnService.tunnelHeld.value) {
             CentiumVpnService.stop(this)
+        } else if (VpnService.prepare(this) != null) {
+            // VPN consent dialog needs an Activity
+            openApp()
         } else {
-            val config = CentiumApplication.instance.preferencesRepository.getConfig()
-            CentiumVpnService.start(this)
+            try {
+                CentiumVpnService.start(this)
+            } catch (_: Exception) {
+                openApp()
+            }
         }
         updateTileState()
     }
 
+    @SuppressLint("StartActivityAndCollapseDeprecated")
+    private fun openApp() {
+        val intent = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startActivityAndCollapse(
+                PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(intent)
+        }
+    }
+
     private fun updateTileState() {
         val tile = qsTile ?: return
-        val service = CentiumVpnService.activeServiceInstance
-        val state = service?.connectionState?.value ?: ConnectionState.DISCONNECTED
+        val state = CentiumVpnService.connectionState.value
 
-        when (state) {
-            ConnectionState.CONNECTED -> {
-                tile.state = Tile.STATE_ACTIVE
-                tile.subtitle = "Connected"
-            }
-            ConnectionState.DISCONNECTED -> {
-                tile.state = Tile.STATE_INACTIVE
-                tile.subtitle = "Disconnected"
-            }
-            else -> {
-                tile.state = Tile.STATE_UNAVAILABLE
-                tile.subtitle = state.defaultMessage
-            }
+        val subtitle = when (state) {
+            ConnectionState.CONNECTED -> "Connected"
+            ConnectionState.DISCONNECTED -> "Disconnected"
+            ConnectionState.ERROR -> "Error"
+            else -> "Connecting…"
+        }
+        tile.state = when (state) {
+            ConnectionState.DISCONNECTED, ConnectionState.ERROR -> Tile.STATE_INACTIVE
+            else -> Tile.STATE_ACTIVE
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            tile.subtitle = subtitle
         }
         tile.updateTile()
     }

@@ -1,75 +1,64 @@
 package org.centium.vpn.tor
 
-import java.io.File
 import org.centium.vpn.data.BridgeMode
 import org.centium.vpn.data.BridgeType
 import org.centium.vpn.data.CentiumConfig
 
+/**
+ * Generates the user torrc for TorService. TorService itself supplies
+ * DataDirectory, ControlSocket and RunAsDaemon on the command line.
+ */
 class TorrcGenerator {
 
-    fun generateTorrc(
-        config: CentiumConfig,
-        dataDir: File,
-        pidFile: File,
-        logFile: File,
-        appFilesDir: File
-    ): String {
+    fun generateTorrc(config: CentiumConfig): String {
         val lines = mutableListOf<String>()
 
-        lines.add("DataDirectory ${dataDir.absolutePath}")
-        lines.add("PidFile ${pidFile.absolutePath}")
-        lines.add("SocksPort 127.0.0.1:${config.socksPort}")
-        lines.add("ControlPort 127.0.0.1:${config.controlPort}")
-        lines.add("DNSPort 127.0.0.1:${config.dnsPort}")
-        lines.add("AutomapHostsOnResolve 1")
-        lines.add("AutomapHostsSuffixes .exit,.onion")
-        lines.add("VirtualAddrNetworkIPv4 10.192.0.0/10")
-        lines.add("CookieAuthentication 0")
-        lines.add("ExitRelay 0")
+        // Let Tor pick a free port so we never collide with Orbot etc.
+        lines.add("SocksPort 127.0.0.1:auto")
         lines.add("ClientOnly 1")
-        lines.add("RunAsDaemon 0")
-        lines.add("Log notice file ${logFile.absolutePath}")
+        lines.add("AvoidDiskWrites 1")
 
         // Exit node country selection
         if (config.exitLocation.isNotEmpty() && config.exitLocation != "auto") {
             val code = config.exitLocation.lowercase()
+            require(code.matches(Regex("[a-z]{2}"))) {
+                "Exit country must be a two-letter code like de or us (got \"${config.exitLocation}\")"
+            }
             lines.add("ExitNodes {$code}")
             lines.add("StrictNodes 1")
         }
 
-        // Bridge configuration
-        when (config.bridgeMode) {
-            BridgeMode.BUILTIN -> {
-                when (config.bridgeType) {
-                    BridgeType.SNOWFLAKE -> {
-                        lines.add("UseBridges 1")
-                        lines.add("Bridge snowflake 192.0.2.3:1 2B280B23E1107BB62ABFC40DDCC816AE1BF03482")
-                        lines.add("Bridge snowflake 192.0.2.4:1 8838EA4445A2D3D96CF7BA7269F860286E2130AD")
-                    }
-                    BridgeType.OBFS4 -> {
-                        if (config.customBridges.isNotBlank()) {
-                            lines.add("UseBridges 1")
-                            config.customBridges.lines().map { it.trim() }.filter { it.isNotEmpty() }.forEach { line ->
-                                val clean = if (line.startsWith("Bridge ")) line.substring(7) else line
-                                lines.add("Bridge $clean")
-                            }
-                        }
-                    }
-                    else -> {}
-                }
-            }
-            BridgeMode.CUSTOM -> {
-                if (config.customBridges.isNotBlank()) {
-                    lines.add("UseBridges 1")
-                    config.customBridges.lines().map { it.trim() }.filter { it.isNotEmpty() }.forEach { line ->
-                        val clean = if (line.startsWith("Bridge ")) line.substring(7) else line
-                        lines.add("Bridge $clean")
-                    }
-                }
-            }
-            else -> {}
+        val bridgeLines = when {
+            config.bridgeMode == BridgeMode.BUILTIN && config.bridgeType == BridgeType.SNOWFLAKE ->
+                throw IllegalArgumentException(PT_UNSUPPORTED)
+            config.bridgeMode == BridgeMode.CUSTOM ||
+                (config.bridgeMode == BridgeMode.BUILTIN && config.bridgeType == BridgeType.OBFS4) ->
+                parseBridgeLines(config.customBridges)
+            else -> emptyList()
+        }
+
+        if (bridgeLines.isNotEmpty()) {
+            lines.add("UseBridges 1")
+            bridgeLines.forEach { lines.add("Bridge $it") }
         }
 
         return lines.joinToString("\n") + "\n"
+    }
+
+    private fun parseBridgeLines(raw: String): List<String> {
+        return raw.lines()
+            .map { it.trim().removePrefix("Bridge ").trim() }
+            .filter { it.isNotEmpty() }
+            .onEach { line ->
+                // A vanilla bridge starts with IP:port; anything else names a transport
+                val first = line.substringBefore(' ')
+                if (!first.contains(':')) throw IllegalArgumentException(PT_UNSUPPORTED)
+            }
+    }
+
+    companion object {
+        private const val PT_UNSUPPORTED =
+            "Pluggable-transport bridges (obfs4/snowflake/meek/webtunnel) are not bundled in this build. " +
+                "Use plain IP:port bridges or disable bridges in Settings."
     }
 }

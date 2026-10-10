@@ -8,8 +8,8 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import org.centium.vpn.CentiumApplication
 import org.centium.vpn.R
 import org.centium.vpn.data.ConnectionState
 import org.centium.vpn.databinding.FragmentConnectionBinding
@@ -54,7 +54,7 @@ class ConnectionFragment : Fragment() {
                 val service = CentiumVpnService.activeServiceInstance
                 val ok = service?.torManager?.controller?.signalNewnym() ?: false
                 if (ok) {
-                    service?.addLog("[Identity] Signal NEWNYM sent. Building new Tor circuit...")
+                    CentiumVpnService.addLog("[Identity] Signal NEWNYM sent. New connections will use fresh circuits.")
                 }
             }
         }
@@ -67,10 +67,7 @@ class ConnectionFragment : Fragment() {
     }
 
     private fun handleConnectToggle() {
-        val service = CentiumVpnService.activeServiceInstance
-        val isConnected = service?.connectionState?.value?.isConnected == true
-
-        if (isConnected) {
+        if (isActiveOrHeld(CentiumVpnService.connectionState.value, CentiumVpnService.tunnelHeld.value)) {
             vpnManager.stopVpnService()
         } else {
             val act = activity ?: return
@@ -80,13 +77,16 @@ class ConnectionFragment : Fragment() {
         }
     }
 
+    /** Connected, connecting, or holding a fail-closed tunnel: the button disconnects. */
+    private fun isActiveOrHeld(state: ConnectionState, tunnelHeld: Boolean): Boolean =
+        state.isConnected || state.isTransitioning || tunnelHeld
+
     private fun observeServiceState() {
-        val service = CentiumVpnService.activeServiceInstance ?: return
+        val service = CentiumVpnService
 
         viewLifecycleOwner.lifecycleScope.launch {
-            service.connectionState.collectLatest { state ->
-                updateUiForState(state)
-            }
+            service.connectionState.combine(service.tunnelHeld) { state, held -> state to held }
+                .collectLatest { (state, held) -> updateUiForState(state, held) }
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -136,21 +136,29 @@ class ConnectionFragment : Fragment() {
         }
     }
 
-    private fun updateUiForState(state: ConnectionState) {
+    private fun updateUiForState(state: ConnectionState, tunnelHeld: Boolean) {
         binding.tvStatusTitle.text = state.defaultMessage
 
         when {
-            state.isConnected -> {
+            state == ConnectionState.DISCONNECTING -> {
+                binding.btnConnectToggle.text = "Disconnecting..."
+                binding.btnConnectToggle.isEnabled = false
+                binding.btnNewIdentity.isEnabled = false
+            }
+            state.isConnected || tunnelHeld -> {
+                binding.btnConnectToggle.isEnabled = true
                 binding.btnConnectToggle.text = getString(R.string.action_disconnect)
                 binding.btnConnectToggle.setBackgroundColor(requireContext().getColor(R.color.centium_error))
                 binding.btnNewIdentity.isEnabled = true
             }
             state.isTransitioning -> {
-                binding.btnConnectToggle.text = "Connecting..."
+                binding.btnConnectToggle.isEnabled = true
+                binding.btnConnectToggle.text = getString(R.string.action_cancel)
                 binding.btnConnectToggle.setBackgroundColor(requireContext().getColor(R.color.centium_warning))
                 binding.btnNewIdentity.isEnabled = false
             }
             else -> {
+                binding.btnConnectToggle.isEnabled = true
                 binding.btnConnectToggle.text = getString(R.string.action_connect)
                 binding.btnConnectToggle.setBackgroundColor(requireContext().getColor(R.color.centium_primary))
                 binding.btnNewIdentity.isEnabled = false

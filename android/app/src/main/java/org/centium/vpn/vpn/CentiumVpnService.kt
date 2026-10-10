@@ -1,22 +1,29 @@
 package org.centium.vpn.vpn
 
-import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import java.io.IOException
 import java.net.Socket
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.centium.vpn.CentiumApplication
 import org.centium.vpn.bridge.HevTunnelBridge
 import org.centium.vpn.data.CentiumConfig
@@ -30,9 +37,10 @@ import org.centium.vpn.tor.TorManager
 class CentiumVpnService : VpnService() {
 
     private val binder = LocalBinder()
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var connectionJob: Job? = null
     private var supervisionJob: Job? = null
+    private var isForeground = false
 
     private var tunDescriptor: ParcelFileDescriptor? = null
     private val tunConfig = TunConfiguration()
@@ -46,36 +54,6 @@ class CentiumVpnService : VpnService() {
     private val failClosedGuard = FailClosedGuard { alert ->
         addLog(alert)
     }
-
-    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
-
-    private val _statusMessage = MutableStateFlow("Ready to connect")
-    val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
-
-    private val _bootstrapPercent = MutableStateFlow(0)
-    val bootstrapPercent: StateFlow<Int> = _bootstrapPercent.asStateFlow()
-
-    private val _publicIp = MutableStateFlow<String?>(null)
-    val publicIp: StateFlow<String?> = _publicIp.asStateFlow()
-
-    private val _exitCountry = MutableStateFlow<String?>(null)
-    val exitCountry: StateFlow<String?> = _exitCountry.asStateFlow()
-
-    private val _circuit = MutableStateFlow<List<CircuitNode>>(emptyList())
-    val circuit: StateFlow<List<CircuitNode>> = _circuit.asStateFlow()
-
-    private val _bytesReceived = MutableStateFlow(0L)
-    val bytesReceived: StateFlow<Long> = _bytesReceived.asStateFlow()
-
-    private val _bytesSent = MutableStateFlow(0L)
-    val bytesSent: StateFlow<Long> = _bytesSent.asStateFlow()
-
-    private val _logs = MutableStateFlow<List<String>>(emptyList())
-    val logs: StateFlow<List<String>> = _logs.asStateFlow()
-
-    var connectedSince: Long? = null
-        private set
 
     inner class LocalBinder : Binder() {
         fun getService(): CentiumVpnService = this@CentiumVpnService
@@ -99,31 +77,35 @@ class CentiumVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_CONNECT -> {
-                val config = CentiumApplication.instance.preferencesRepository.getConfig()
-                startVpn(config)
-            }
-            ACTION_DISCONNECT -> {
-                stopVpn()
+            ACTION_DISCONNECT -> stopVpn()
+            // SERVICE_INTERFACE / null: started by Android's Always-on VPN
+            ACTION_CONNECT, SERVICE_INTERFACE, null -> {
+                if (!enterForeground()) return START_NOT_STICKY
+                startVpn(CentiumApplication.instance.preferencesRepository.getConfig())
             }
         }
-        return Service.START_NOT_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder {
         val vpnInterface = super.onBind(intent)
-        return if (vpnInterface != null) vpnInterface else binder
+        return vpnInterface ?: binder
     }
 
     override fun onRevoke() {
         addLog("[VPN Lifecycle] System revoked VPN permission.")
         stopVpn()
-        super.onRevoke()
     }
 
     override fun onDestroy() {
         activeServiceInstance = null
-        stopVpn()
+        connectionJob?.cancel()
+        supervisionJob?.cancel()
+        serviceScope.cancel()
+        cleanupVpnState()
+        if (_connectionState.value != ConnectionState.ERROR) {
+            setState(ConnectionState.DISCONNECTED, "Disconnected")
+        }
         super.onDestroy()
     }
 
@@ -131,95 +113,129 @@ class CentiumVpnService : VpnService() {
         return protect(socket)
     }
 
+    /** Must run within a few seconds of startForegroundService(), before any slow work. */
+    private fun enterForeground(): Boolean {
+        val notification = CentiumApplication.instance.notificationManager.buildVpnNotification(
+            state = _connectionState.value.takeIf { it.isConnected || it.isTransitioning }
+                ?: ConnectionState.STARTING_TOR,
+            exitIp = _publicIp.value,
+            country = _exitCountry.value
+        )
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    VpnNotificationManager.NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED
+                )
+            } else {
+                startForeground(VpnNotificationManager.NOTIFICATION_ID, notification)
+            }
+            isForeground = true
+            true
+        } catch (e: Exception) {
+            addLog("[VPN Error] Could not enter foreground: ${e.message}")
+            setState(ConnectionState.ERROR, "VPN permission required — open Centium and tap Connect")
+            stopSelf()
+            false
+        }
+    }
+
     fun startVpn(config: CentiumConfig) {
-        if (_connectionState.value.isTransitioning || _connectionState.value == ConnectionState.CONNECTED) {
+        val current = _connectionState.value
+        if (current.isTransitioning || current == ConnectionState.CONNECTED) {
             addLog("[VPN] Connection already in progress or connected.")
             return
         }
 
+        // Set synchronously so a second tap can't slip past the guard above
+        updateState(ConnectionState.STARTING_TOR, "Initializing local Tor engine...")
+        _bootstrapPercent.value = 0
+
+        supervisionJob?.cancel()
         connectionJob?.cancel()
         connectionJob = serviceScope.launch(Dispatchers.IO) {
             try {
                 // Step 1: STARTING_TOR
-                updateState(ConnectionState.STARTING_TOR, "Initializing local Tor engine...")
-                _bootstrapPercent.value = 0
-                val torStarted = torManager.start(config)
-                if (!torStarted) {
-                    throw IllegalStateException("Failed to launch Tor process")
+                if (!torManager.start(config)) {
+                    throw IllegalStateException("Failed to start Tor (see Logs)")
                 }
 
                 // Step 2: WAITING_FOR_BOOTSTRAP
                 updateState(ConnectionState.WAITING_FOR_BOOTSTRAP, "Bootstrapping circuit consensus...")
-                val bootstrapped = torManager.waitForBootstrap(config.connectionTimeoutSeconds)
-                if (!bootstrapped) {
-                    throw IllegalStateException("Tor circuit bootstrap timed out")
+                if (!torManager.waitForBootstrap(config.connectionTimeoutSeconds)) {
+                    throw IllegalStateException("Tor could not connect to the network (timed out)")
                 }
 
                 // Step 3: STARTING_BRIDGE
                 updateState(ConnectionState.STARTING_BRIDGE, "Initializing TUN packet bridge...")
+                bridge.stopBridge()
 
                 // Step 4: ESTABLISHING_VPN
                 updateState(ConnectionState.ESTABLISHING_VPN, "Creating virtual TUN interface...")
                 val pfd = tunConfig.buildTunInterface(this@CentiumVpnService, config)
-                    ?: throw IllegalStateException("Android system denied TUN interface establishment")
+                    ?: throw IllegalStateException("VPN permission missing — open Centium and tap Connect")
+                val previous = tunDescriptor
                 tunDescriptor = pfd
+                closeQuietly(previous)
 
                 // Step 5: CONFIGURING_DNS_AND_ROUTES
                 updateState(ConnectionState.CONFIGURING_DNS_AND_ROUTES, "Connecting tunnel to Tor SOCKS5...")
-                val bridgeStarted = bridge.startBridge(pfd.fd, config)
-                if (!bridgeStarted) {
+                if (!bridge.startBridge(pfd.fd, torManager.socksPort, config)) {
                     throw IllegalStateException("Failed to start native hev-socks5-tunnel bridge on TUN fd")
                 }
                 failClosedGuard.armKillSwitch()
+                _tunnelHeld.value = true
 
-                // Foreground Notification
-                startForeground(
-                    VpnNotificationManager.NOTIFICATION_ID,
-                    CentiumApplication.instance.notificationManager.buildVpnNotification(
-                        state = ConnectionState.CONNECTED,
-                        exitIp = null,
-                        country = null
-                    )
-                )
-
-                // Step 6: VERIFYING_PROTECTION (Unproxied HTTP test through TUN)
-                updateState(ConnectionState.VERIFYING_PROTECTION, "Auditing Tor exit IP through tunnel...")
-                val verifier = VerificationMatrix()
-                val verification = verifier.verifyTunnelTraffic(config.socksPort)
-                if (!verification.isTor || verification.ip == null) {
-                    throw IllegalStateException("Exit verification failed: host traffic is not traversing Tor")
+                // Step 6: VERIFYING_PROTECTION
+                updateState(ConnectionState.VERIFYING_PROTECTION, "Verifying Tor exit...")
+                val verification = VerificationMatrix().verifyTunnelTraffic(torManager.socksPort)
+                val status = if (verification.isTor) {
+                    _publicIp.value = verification.ip
+                    _exitCountry.value = verification.country
+                    addLog("[VPN] ✓ Exit verified as Tor: ${verification.ip} (${verification.country})")
+                    "Protected via Tor (${verification.ip})"
+                } else {
+                    // All traffic is already captured by the TUN and can only leave via Tor,
+                    // so an unreachable check service is not a leak; just report it.
+                    addLog("[VPN Warning] Could not reach check.torproject.org to confirm the exit IP.")
+                    "Routing through Tor (exit check unavailable)"
                 }
-
-                _publicIp.value = verification.ip
-                _exitCountry.value = verification.country
                 _circuit.value = torManager.controller.getCircuits()
 
                 // Step 7: CONNECTED
                 connectedSince = System.currentTimeMillis()
-                updateState(ConnectionState.CONNECTED, "Protected by Centium VPN (${verification.ip})")
-                addLog("[VPN] ✓ Fully connected and verified. Exit IP: ${verification.ip}")
+                updateState(ConnectionState.CONNECTED, status)
 
-                startSupervisionWatchdog()
-
+                startSupervisionWatchdog(config)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 addLog("[VPN Error] Connection failed: ${e.message}")
-                updateState(ConnectionState.ERROR, e.message ?: "Connection failure")
                 cleanupVpnState()
+                updateState(ConnectionState.ERROR, e.message ?: "Connection failure")
+                withContext(Dispatchers.Main) { leaveForeground() }
             }
         }
     }
 
     fun stopVpn() {
-        connectionJob?.cancel()
-        supervisionJob?.cancel()
-
-        serviceScope.launch(Dispatchers.IO) {
+        serviceScope.launch {
             updateState(ConnectionState.DISCONNECTING, "Disconnecting Centium VPN...")
-            cleanupVpnState()
+            supervisionJob?.cancelAndJoin()
+            connectionJob?.cancelAndJoin()
+            withContext(Dispatchers.IO) { cleanupVpnState() }
             updateState(ConnectionState.DISCONNECTED, "Disconnected")
-            stopForeground(Service.STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            leaveForeground()
         }
+    }
+
+    private fun leaveForeground() {
+        if (isForeground) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            isForeground = false
+        }
+        stopSelf()
     }
 
     private fun cleanupVpnState() {
@@ -227,36 +243,50 @@ class CentiumVpnService : VpnService() {
         bridge.stopBridge()
         torManager.stop()
 
-        try {
-            tunDescriptor?.close()
-        } catch (_: IOException) {}
+        closeQuietly(tunDescriptor)
         tunDescriptor = null
+        _tunnelHeld.value = false
 
         connectedSince = null
         _publicIp.value = null
         _exitCountry.value = null
         _circuit.value = emptyList()
         _bootstrapPercent.value = 0
+        _bytesReceived.value = 0
+        _bytesSent.value = 0
     }
 
-    private fun startSupervisionWatchdog() {
+    private fun closeQuietly(pfd: ParcelFileDescriptor?) {
+        try {
+            pfd?.close()
+        } catch (_: IOException) {}
+    }
+
+    private fun startSupervisionWatchdog(config: CentiumConfig) {
         supervisionJob?.cancel()
         supervisionJob = serviceScope.launch(Dispatchers.IO) {
-            while (_connectionState.value == ConnectionState.CONNECTED) {
+            while (isActive && _connectionState.value == ConnectionState.CONNECTED) {
                 delay(2000)
 
-                // Update traffic counters
                 val stats = bridge.getTrafficStats()
                 _bytesReceived.value = stats.rxBytes
                 _bytesSent.value = stats.txBytes
 
-                // Verify Tor & Bridge health
                 if (!torManager.isRunning() || !bridge.isBridgeActive()) {
                     val alertState = failClosedGuard.handleUnexpectedDrop(
                         reason = "Tor or bridge process stopped",
                         currentState = _connectionState.value
                     )
-                    updateState(alertState, "Connection lost (fail-closed armed)")
+                    if (config.killSwitch) {
+                        // Keep the TUN up with nothing reading it: traffic is dropped, not leaked.
+                        bridge.stopBridge()
+                        torManager.stop()
+                        updateState(alertState, "Connection lost — traffic blocked by kill switch. Disconnect or reconnect.")
+                    } else {
+                        cleanupVpnState()
+                        updateState(alertState, "Connection lost")
+                        withContext(Dispatchers.Main) { leaveForeground() }
+                    }
                     break
                 }
             }
@@ -264,12 +294,8 @@ class CentiumVpnService : VpnService() {
     }
 
     private fun updateState(state: ConnectionState, message: String) {
-        _connectionState.value = state
-        _statusMessage.value = message
-        addLog("[State] ${state.name}: $message")
-
-        // Update foreground notification
-        if (state == ConnectionState.CONNECTED) {
+        setState(state, message)
+        if (isForeground) {
             CentiumApplication.instance.notificationManager.updateNotification(
                 state = state,
                 exitIp = _publicIp.value,
@@ -278,22 +304,64 @@ class CentiumVpnService : VpnService() {
         }
     }
 
-    fun addLog(msg: String) {
-        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
-        val entry = "[$timestamp] $msg"
-        val current = _logs.value.toMutableList()
-        if (current.size > 200) current.removeAt(0)
-        current.add(entry)
-        _logs.value = current
-    }
-
     companion object {
         const val ACTION_CONNECT = "org.centium.vpn.CONNECT"
         const val ACTION_DISCONNECT = "org.centium.vpn.DISCONNECT"
 
+        // Process-wide state so the UI can observe it whether or not the service is running.
+        private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+        val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+
+        private val _statusMessage = MutableStateFlow("Ready to connect")
+        val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
+
+        private val _bootstrapPercent = MutableStateFlow(0)
+        val bootstrapPercent: StateFlow<Int> = _bootstrapPercent.asStateFlow()
+
+        private val _publicIp = MutableStateFlow<String?>(null)
+        val publicIp: StateFlow<String?> = _publicIp.asStateFlow()
+
+        private val _exitCountry = MutableStateFlow<String?>(null)
+        val exitCountry: StateFlow<String?> = _exitCountry.asStateFlow()
+
+        private val _circuit = MutableStateFlow<List<CircuitNode>>(emptyList())
+        val circuit: StateFlow<List<CircuitNode>> = _circuit.asStateFlow()
+
+        private val _bytesReceived = MutableStateFlow(0L)
+        val bytesReceived: StateFlow<Long> = _bytesReceived.asStateFlow()
+
+        private val _bytesSent = MutableStateFlow(0L)
+        val bytesSent: StateFlow<Long> = _bytesSent.asStateFlow()
+
+        /** True while the TUN is up — including a fail-closed drop with Tor down. */
+        private val _tunnelHeld = MutableStateFlow(false)
+        val tunnelHeld: StateFlow<Boolean> = _tunnelHeld.asStateFlow()
+
+        private val _logs = MutableStateFlow<List<String>>(emptyList())
+        val logs: StateFlow<List<String>> = _logs.asStateFlow()
+
+        @Volatile
+        var connectedSince: Long? = null
+            private set
+
         @Volatile
         var activeServiceInstance: CentiumVpnService? = null
             private set
+
+        private fun setState(state: ConnectionState, message: String) {
+            _connectionState.value = state
+            _statusMessage.value = message
+            addLog("[State] ${state.name}: $message")
+        }
+
+        @Synchronized
+        fun addLog(msg: String) {
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+            val current = _logs.value.toMutableList()
+            if (current.size > 300) current.removeAt(0)
+            current.add("[$timestamp] $msg")
+            _logs.value = current
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, CentiumVpnService::class.java).apply {

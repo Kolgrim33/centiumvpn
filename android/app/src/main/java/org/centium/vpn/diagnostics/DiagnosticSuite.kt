@@ -19,6 +19,7 @@ class DiagnosticSuite(private val context: Context) {
         val startTime = System.currentTimeMillis()
 
         val service = CentiumVpnService.activeServiceInstance
+        val socksPort = service?.torManager?.socksPort ?: -1
 
         // Layer 1: Tor Process
         val torAlive = service?.torManager?.isRunning() ?: false
@@ -27,25 +28,25 @@ class DiagnosticSuite(private val context: Context) {
                 layerNumber = 1,
                 layerName = "Tor Process",
                 passed = torAlive,
-                description = if (torAlive) "Tor runtime process active in sandbox" else "Tor daemon not running",
+                description = if (torAlive) "Embedded Tor running and answering control queries" else "Tor not running",
                 remediation = if (!torAlive) "Start VPN via Centium connect button" else null
             )
         )
 
-        // Layer 2: Tor SOCKS5 :9050
-        val socksListening = isPortListening(9050)
+        // Layer 2: Tor SOCKS5
+        val socksListening = socksPort > 0 && isPortListening(socksPort)
         checks.add(
             DiagnosticResult.LayerCheck(
                 layerNumber = 2,
-                layerName = "Tor SOCKS5 :9050",
+                layerName = "Tor SOCKS5 Port",
                 passed = socksListening,
-                description = if (socksListening) "Listening on 127.0.0.1:9050" else "SOCKS port 9050 not bound",
+                description = if (socksListening) "Listening on 127.0.0.1:$socksPort" else "SOCKS port not bound",
                 remediation = if (!socksListening) "Verify Tor configuration and port binding" else null
             )
         )
 
         // Layer 3: Tor Bootstrap Consensus
-        val bootstrap = service?.bootstrapPercent?.value ?: 0
+        val bootstrap = CentiumVpnService.bootstrapPercent.value
         val bootstrapOk = bootstrap >= 100
         checks.add(
             DiagnosticResult.LayerCheck(
@@ -58,7 +59,7 @@ class DiagnosticSuite(private val context: Context) {
         )
 
         // Layer 4: TUN Interface
-        val vpnActive = service?.connectionState?.value?.isConnected ?: false
+        val vpnActive = CentiumVpnService.connectionState.value.isConnected
         checks.add(
             DiagnosticResult.LayerCheck(
                 layerNumber = 4,
@@ -103,25 +104,26 @@ class DiagnosticSuite(private val context: Context) {
             )
         )
 
-        // Layer 8: DNS Protection
-        val dnsListening = isPortListening(9053)
+        // Layer 8: DNS Protection (hev mapdns inside the tunnel, resolved by Tor)
+        val dnsListening = vpnActive && bridgeActive
         checks.add(
             DiagnosticResult.LayerCheck(
                 layerNumber = 8,
                 layerName = "DNS Protection",
                 passed = dnsListening,
-                description = if (dnsListening) "Tor DNSPort 9053 active and intercepted" else "DNSPort inactive",
-                remediation = if (!dnsListening) "Verify DNSPort in torrc" else null
+                description = if (dnsListening) "DNS answered in-tunnel; hostnames resolved by Tor exit" else "Tunnel DNS inactive",
+                remediation = if (!dnsListening) "Connect the VPN" else null
             )
         )
 
         // Layer 9: Tor SOCKS Connectivity
         var socksTorOk = false
-        try {
-            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050))
+        if (socksPort > 0) try {
+            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", socksPort))
             val client = OkHttpClient.Builder()
                 .proxy(proxy)
-                .connectTimeout(6, TimeUnit.SECONDS)
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
                 .build()
 
             val req = Request.Builder().url("https://check.torproject.org/api/ip").build()
@@ -142,13 +144,13 @@ class DiagnosticSuite(private val context: Context) {
 
         // Layer 10: External Exit IP (Through Tunnel)
         val verifier = VerificationMatrix()
-        val verification = verifier.verifyTunnelTraffic(9050)
+        val verification = verifier.verifyTunnelTraffic(socksPort, attempts = 1)
         checks.add(
             DiagnosticResult.LayerCheck(
                 layerNumber = 10,
                 layerName = "External IP Verification",
                 passed = verification.isTor,
-                description = if (verification.isTor) "Verified Tor exit IP through tunnel: ${verification.ip}" else "Direct tunnel egress verification failed",
+                description = if (verification.isTor) "Verified Tor exit IP: ${verification.ip}" else "Tor exit verification failed",
                 remediation = if (!verification.isTor) "Audit TUN bridge routing and DNS" else null
             )
         )

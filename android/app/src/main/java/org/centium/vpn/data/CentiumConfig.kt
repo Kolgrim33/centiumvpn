@@ -9,10 +9,7 @@ data class CentiumConfig(
     var blockIpv6: Boolean = true,
     var autoConnect: Boolean = false,
     var dnsProtection: Boolean = true,
-    var socksPort: Int = 9050,
-    var controlPort: Int = 9051,
-    var dnsPort: Int = 9053,
-    var connectionTimeoutSeconds: Int = 60,
+    var connectionTimeoutSeconds: Int = 120,
     var disallowPackages: Set<String> = emptySet()
 )
 

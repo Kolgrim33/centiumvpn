@@ -71,7 +71,7 @@ class VpnNotificationManager(private val context: Context) {
             .setOngoing(state.isConnected || state.isTransitioning)
             .setPriority(NotificationCompat.PRIORITY_LOW)
 
-        if (state.isConnected) {
+        if (state.isConnected || state.isTransitioning || state == ConnectionState.ERROR) {
             builder.addAction(
                 R.drawable.ic_vpn_lock,
                 context.getString(R.string.action_disconnect),

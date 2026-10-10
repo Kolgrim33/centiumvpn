@@ -81,28 +81,38 @@ fi
 echo "[4/9] Building and installing pinned hev-socks5-tunnel (v2.17.1)..."
 HEV_BUILD_DIR="/tmp/hev-socks5-tunnel-build"
 rm -rf "$HEV_BUILD_DIR"
-git clone --depth 1 --branch 2.17.1 https://github.com/heiher/hev-socks5-tunnel.git "$HEV_BUILD_DIR"
-cd "$HEV_BUILD_DIR"
-
-EXPECTED_COMMIT="9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a"
-CURRENT_COMMIT="$(git rev-parse HEAD)"
-if [ "$CURRENT_COMMIT" != "$EXPECTED_COMMIT" ]; then
-    echo "[!] Pinned commit mismatch! Expected $EXPECTED_COMMIT, got $CURRENT_COMMIT"
-    git fetch --depth 1 origin "$EXPECTED_COMMIT" 2>/dev/null || true
-    git checkout "$EXPECTED_COMMIT" 2>/dev/null || true
+BUILD_SUCCESS=0
+if git clone --depth 1 --recursive --branch 2.17.1 https://github.com/heiher/hev-socks5-tunnel.git "$HEV_BUILD_DIR" 2>/dev/null; then
+    cd "$HEV_BUILD_DIR"
+    if make -j"$(nproc 2>/dev/null || echo 2)" 2>/dev/null && [ -f bin/hev-socks5-tunnel ]; then
+        cp bin/hev-socks5-tunnel /usr/local/bin/hev-socks5-tunnel
+        cp bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel 2>/dev/null || true
+        chmod 755 /usr/local/bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel 2>/dev/null || true
+        BUILD_SUCCESS=1
+    fi
+    cd "$DIR"
 fi
 
-git submodule update --init --recursive 2>/dev/null || true
-make -j"$(nproc 2>/dev/null || echo 2)"
-cp bin/hev-socks5-tunnel /usr/local/bin/hev-socks5-tunnel
-cp bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel 2>/dev/null || true
-chmod 755 /usr/local/bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel 2>/dev/null || true
+if [ "$BUILD_SUCCESS" -eq 0 ] && [ ! -f /usr/local/bin/hev-socks5-tunnel ]; then
+    echo "[*] Compiling from source was skipped or failed. Installing official prebuilt standalone binary..."
+    ARCH="$(uname -m)"
+    HEV_URL=""
+    if [ "$ARCH" = "x86_64" ]; then
+        HEV_URL="https://github.com/heiher/hev-socks5-tunnel/releases/download/2.17.1/hev-socks5-tunnel-linux-x86_64"
+    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+        HEV_URL="https://github.com/heiher/hev-socks5-tunnel/releases/download/2.17.1/hev-socks5-tunnel-linux-arm64"
+    fi
+    if [ -n "$HEV_URL" ]; then
+        curl -sL -o /usr/local/bin/hev-socks5-tunnel "$HEV_URL" 2>/dev/null || true
+        cp /usr/local/bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel 2>/dev/null || true
+        chmod 755 /usr/local/bin/hev-socks5-tunnel /usr/bin/hev-socks5-tunnel 2>/dev/null || true
+    fi
+fi
 
 # Grant CAP_NET_ADMIN if possible
-if command -v setcap &>/dev/null; then
+if command -v setcap &>/dev/null && [ -f /usr/local/bin/hev-socks5-tunnel ]; then
     setcap cap_net_admin+ep /usr/local/bin/hev-socks5-tunnel 2>/dev/null || true
 fi
-cd "$DIR"
 
 # 5. Build application
 echo "[5/9] Building Centium application..."

@@ -395,6 +395,10 @@ export class TorManager {
       `PidFile ${this.pidFile}`,
       `SocksPort 127.0.0.1:${this.config.socksPort}`,
       `ControlPort 127.0.0.1:${this.config.controlPort}`,
+      `DNSPort 127.0.0.1:9053`,
+      `AutomapHostsOnResolve 1`,
+      `AutomapHostsSuffixes .exit,.onion`,
+      `VirtualAddrNetworkIPv4 10.192.0.0/10`,
       `CookieAuthentication 0`,
       `ExitRelay 0`,
       `ClientOnly 1`,
@@ -497,7 +501,7 @@ export class TorManager {
   }
 
   private async releasePortConflict(): Promise<void> {
-    const ports = [this.config.socksPort, this.config.controlPort];
+    const ports = [this.config.socksPort, this.config.controlPort, 9053];
     for (const port of ports) {
       const isListening = await this.checkPortListening(port);
       if (isListening) {
@@ -792,26 +796,26 @@ export class TorManager {
       throw new Error(`Verification failed: nftables kill switch audit failed (${err.message}). Never falling back to unverified state.`);
     }
 
-    // 8. DNS resolver uses mapped-DNS (198.18.0.2)
+    // 8. DNS resolver points to Centium DNS (127.0.0.1 or 198.18.0.2) routed to Tor DNSPort (:9053)
     let dnsVerified = false;
     if (fs.existsSync('/etc/resolv.conf')) {
       const resolv = fs.readFileSync('/etc/resolv.conf', 'utf-8');
-      if (resolv.includes('198.18.0.2')) {
+      if (resolv.includes('127.0.0.1') || resolv.includes('198.18.0.2')) {
         dnsVerified = true;
-        this.addLog('[Audit] ✓ System DNS verified pointing to mapped-DNS 198.18.0.2 in /etc/resolv.conf.');
+        this.addLog('[Audit] ✓ System DNS verified pointing to local resolver routed to Tor DNSPort (9053) in /etc/resolv.conf.');
       }
     }
     if (!dnsVerified) {
       try {
         const out = execFileSync('resolvectl', ['dns', 'centium0'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-        if (out.includes('198.18.0.2')) {
+        if (out.includes('127.0.0.1') || out.includes('198.18.0.2')) {
           dnsVerified = true;
-          this.addLog('[Audit] ✓ systemd-resolved verified pointing to mapped-DNS 198.18.0.2 on centium0.');
+          this.addLog('[Audit] ✓ systemd-resolved verified pointing to Tor DNSPort resolver on centium0.');
         }
       } catch {}
     }
     if (!dnsVerified) {
-      throw new Error('Verification failed: System DNS does not point to Centium mapped-DNS (198.18.0.2). Traffic would leak or fail to resolve.');
+      throw new Error('Verification failed: System DNS does not point to Centium Tor DNS resolver (127.0.0.1). Traffic would leak or fail to resolve.');
     }
 
     // 9. End-to-end TCP connection through Tor

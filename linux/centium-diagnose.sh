@@ -22,7 +22,8 @@ TUN_DEV="centium0"
 ROUTING_TABLE=8420
 FWMARK="0x8420"
 NFT_TABLE="centium"
-DNS_MAPPED_IP="198.18.0.2"
+DNS_MAPPED_IP="127.0.0.1"
+TOR_DNS_PORT=9053
 SOCKS5_PORT=9050
 SOCKS5_HOST="127.0.0.1"
 
@@ -229,18 +230,18 @@ fi
 # ------------------------------------------------------------------------------
 dns_ok=0
 dns_detail=""
-if [ -f /etc/resolv.conf ] && grep -q "$DNS_MAPPED_IP" /etc/resolv.conf 2>/dev/null; then
+if [ -f /etc/resolv.conf ] && grep -q -E "(127\.0\.0\.1|198\.18\.0\.2)" /etc/resolv.conf 2>/dev/null; then
     dns_ok=1
-    dns_detail="nameserver ${DNS_MAPPED_IP} in /etc/resolv.conf"
-elif command -v resolvectl &>/dev/null && resolvectl dns "${TUN_DEV}" 2>/dev/null | grep -q "$DNS_MAPPED_IP"; then
+    dns_detail="nameserver 127.0.0.1 in /etc/resolv.conf (routed to Tor DNSPort :${TOR_DNS_PORT})"
+elif command -v resolvectl &>/dev/null && resolvectl dns "${TUN_DEV}" 2>/dev/null | grep -q -E "(127\.0\.0\.1|198\.18\.0\.2)"; then
     dns_ok=1
-    dns_detail="systemd-resolved interface ${TUN_DEV} -> ${DNS_MAPPED_IP}"
+    dns_detail="systemd-resolved interface ${TUN_DEV} -> Tor DNSPort resolver"
 fi
 
 if [ "$dns_ok" -eq 1 ]; then
-    report_pass "DNS configuration" "${dns_detail:-Protected via mapped-DNS ${DNS_MAPPED_IP}}"
+    report_pass "DNS configuration" "${dns_detail}"
 else
-    report_fail "DNS configuration" "Resolver does not point to Centium mapped-DNS (${DNS_MAPPED_IP})" "Run 'sudo /usr/local/bin/centium-network install-dns'."
+    report_fail "DNS configuration" "Resolver does not point to Centium Tor DNS (127.0.0.1)" "Run 'sudo /usr/local/bin/centium-network install-dns'."
 fi
 
 # ------------------------------------------------------------------------------

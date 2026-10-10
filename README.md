@@ -83,4 +83,5 @@ sudo centium-network disable
 
 - **Backend Daemon (`centiumd`)**: Implemented in Node.js / TypeScript (`server.ts` & `server/torManager.ts`), running as a systemd root service. Manages the Tor daemon, virtual TUN interface (`centium0`), `hev-socks5-tunnel` SOCKS-to-TUN bridge, and fail-closed `nftables` rules.
 - **Tauri / Rust Stubs**: Any code in `src-tauri/` or reference Rust daemon definitions are illustrative stubs. The active production daemon and user interface run on the Node.js / Vite engine.
+- **Android Port (`android/`)**: Complete native Kotlin implementation using Android's `VpnService`, embedded Tor runtime, native `hev-socks5-tunnel` JNI bridge, and zero-root architecture. See `android/README.md` for full Android build and testing instructions.
 

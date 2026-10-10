@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.CentiumVPN" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:statusBarColor">@color/centium_bg</item>
+        <item name="android:navigationBarColor">@color/centium_bg</item>
+        <item name="android:windowBackground">@color/centium_bg</item>
+        <item name="colorPrimary">@color/centium_primary</item>
+        <item name="colorSecondary">@color/centium_accent</item>
+        <item name="colorSurface">@color/centium_surface</item>
+        <item name="colorError">@color/centium_error</item>
+    </style>
+</resources>

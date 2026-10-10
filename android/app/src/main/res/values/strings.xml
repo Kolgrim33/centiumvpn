@@ -1,0 +1,51 @@
+<resources>
+    <string name="app_name">Centium VPN</string>
+    <string name="tile_name">Centium</string>
+    <string name="app_tagline">Tor-Powered System-Wide VPN</string>
+
+    <!-- Connection States -->
+    <string name="state_disconnected">Disconnected</string>
+    <string name="state_starting_tor">Starting Tor Engine</string>
+    <string name="state_waiting_bootstrap">Bootstrapping Circuit</string>
+    <string name="state_starting_bridge">Initializing Native Bridge</string>
+    <string name="state_establishing_vpn">Establishing TUN Device</string>
+    <string name="state_configuring_dns">Activating Tor DNS</string>
+    <string name="state_verifying">Auditing Security Matrix</string>
+    <string name="state_connected">Protected by Centium VPN</string>
+    <string name="state_reconnecting">Reconnecting</string>
+    <string name="state_disconnecting">Disconnecting</string>
+    <string name="state_error">Connection Error</string>
+
+    <!-- Actions -->
+    <string name="action_connect">Connect</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_diagnostics">Run Diagnostics</string>
+    <string name="action_new_identity">New Tor Identity</string>
+
+    <!-- Metrics -->
+    <string name="metric_circuit">Tor Circuit</string>
+    <string name="metric_traffic">Traffic</string>
+    <string name="metric_download">Download</string>
+    <string name="metric_upload">Upload</string>
+    <string name="metric_duration">Session Duration</string>
+    <string name="metric_exit_ip">Exit IP</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_bridge_mode">Tor Bridge Mode</string>
+    <string name="settings_exit_node">Exit Country</string>
+    <string name="settings_kill_switch">Fail-Closed Kill Switch</string>
+    <string name="settings_kill_switch_summary">Blocks network traffic if Tor circuit or TUN tunnel drops unexpectedly.</string>
+    <string name="settings_dns_protection">Tor DNS Enforcement</string>
+    <string name="settings_dns_protection_summary">Forces all UDP/TCP 53 requests through Tor DNSPort (9053).</string>
+    <string name="settings_block_ipv6">Block IPv6 Leakage</string>
+    <string name="settings_block_ipv6_summary">Prevents direct ISP IPv6 egress when IPv6 is not available over Tor.</string>
+    <string name="settings_always_on">System Always-on VPN Settings</string>
+
+    <!-- Notification -->
+    <string name="notif_channel_vpn">Centium VPN Status</string>
+    <string name="notif_channel_vpn_desc">Shows ongoing VPN connection status and metrics.</string>
+    <string name="notif_connected_title">Centium VPN Active</string>
+    <string name="notif_connected_desc">All device traffic is encrypted through the Tor network.</string>
+</resources>

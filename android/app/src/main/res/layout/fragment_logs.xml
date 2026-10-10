@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/centium_bg"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="CENTIUM RUNTIME LOGS"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="@color/text_muted"
+        android:layout_marginBottom="8dp" />
+
+    <ScrollView
+        android:id="@+id/scrollLogs"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/card_background"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/tvLogOutput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="No logs recorded."
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+
+    </ScrollView>
+
+</LinearLayout>

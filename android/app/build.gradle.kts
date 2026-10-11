@@ -5,6 +5,7 @@ plugins {
 }
 
 val centiumVersionName = providers.gradleProperty("centium.versionName").get()
+val centiumVersionCode = providers.gradleProperty("centium.versionCode").get().toInt()
 
 /** 1.2.3 -> 10203; must only ever increase, Android rejects lower codes as updates. */
 fun versionCodeOf(name: String): Int {
@@ -47,7 +48,11 @@ android {
         applicationId = "org.centium.vpn"
         minSdk = 26
         targetSdk = 34
-        versionCode = versionCodeOf(centiumVersionName)
+        versionCode = centiumVersionCode.also {
+            require(it == versionCodeOf(centiumVersionName)) {
+                "centium.versionCode must be ${versionCodeOf(centiumVersionName)} for versionName $centiumVersionName"
+            }
+        }
         versionName = centiumVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -1,5 +1,5 @@
 # Builds, signs and publishes the Android app when a version tag is pushed.
-# Release: bump centium.versionName in android/gradle.properties, add a matching
+# Release: bump centium.versionName and centium.versionCode in android/gradle.properties, add a matching
 # "## x.y.z" section to CHANGELOG.md, then `git tag vx.y.z && git push origin vx.y.z`.
 name: Android release
 

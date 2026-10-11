@@ -101,7 +101,7 @@
     <string name="update_status_disabled">Test builds don\'t update. Install a release from GitHub.</string>
     <string name="update_banner_title">Version %1$s is ready</string>
     <string name="update_banner_body">Centium restarts to install it and reconnects on its own.</string>
-    <string name="update_allow_installs">Allow Centium to install updates, then tap Install again.</string>
+    <string name="update_allow_installs">Allow Centium to install updates, then come back. The update continues on its own.</string>
     <string name="whats_new_title">What\'s new in %1$s</string>
     <string name="whats_new_dismiss">Got it</string>
     <string name="update_ready_title">Centium %1$s is ready</string>

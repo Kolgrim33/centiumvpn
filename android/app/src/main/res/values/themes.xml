@@ -15,6 +15,10 @@
         <item name="textAppearanceLabelLarge">@style/TextAppearance.Centium.M3.LabelLarge</item>
         <item name="textAppearanceLabelMedium">@style/TextAppearance.Centium.M3.LabelMedium</item>
         <item name="textAppearanceTitleMedium">@style/TextAppearance.Centium.M3.TitleMedium</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Centium.M3.HeadlineSmall</item>
+        <!-- Dialogs and menus sit on paper, not Material's tinted containers -->
+        <item name="colorSurfaceContainerHigh">@color/paper</item>
+        <item name="colorSurfaceContainerHighest">@color/paper</item>
 
         <item name="colorPrimary">@color/route</item>
         <item name="colorOnPrimary">@color/on_route</item>
@@ -54,6 +58,12 @@
     <style name="TextAppearance.Centium.M3.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
         <item name="android:fontFamily">@font/overpass_semibold</item>
         <item name="fontFamily">@font/overpass_semibold</item>
+    </style>
+
+    <style name="TextAppearance.Centium.M3.HeadlineSmall" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:fontFamily">@font/overpass_extrabold</item>
+        <item name="fontFamily">@font/overpass_extrabold</item>
+        <item name="android:textSize">22sp</item>
     </style>
 
     <!-- Type scale: 13 / 15 / 18 / 24 / 34 -->
@@ -121,7 +131,7 @@
         <item name="fontFamily">@font/overpass_semibold</item>
         <item name="android:textSize">15sp</item>
         <item name="android:letterSpacing">0</item>
-        <item name="android:textColor">@color/route</item>
+        <item name="android:textColor">@color/text_button</item>
     </style>
 
     <style name="Widget.Centium.BottomNav" parent="Widget.Material3.BottomNavigationView">

@@ -85,11 +85,24 @@ class MainActivity : AppCompatActivity() {
         }
         .trim()
 
+    /** Set while the user is in Android settings allowing Centium to install updates. */
+    private var resumeInstallOnReturn = false
+
     /** Shared by the Connect banner and Settings. */
     fun installUpdate() {
         val needsPermission = CentiumApplication.instance.updateManager.install() ?: return
         Toast.makeText(this, R.string.update_allow_installs, Toast.LENGTH_LONG).show()
+        resumeInstallOnReturn = true
         startActivity(needsPermission)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Coming back from the "install unknown apps" switch: carry on without a second tap
+        if (resumeInstallOnReturn && packageManager.canRequestPackageInstalls()) {
+            resumeInstallOnReturn = false
+            CentiumApplication.instance.updateManager.install()
+        }
     }
 
     /** The VPN status notification is silently hidden on Android 13+ without this. */

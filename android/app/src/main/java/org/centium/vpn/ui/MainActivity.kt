@@ -9,6 +9,9 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import org.centium.vpn.BuildConfig
+import org.centium.vpn.CentiumApplication
 import org.centium.vpn.R
 import org.centium.vpn.databinding.ActivityMainBinding
 import org.centium.vpn.vpn.VpnLifecycleManager
@@ -57,6 +60,36 @@ class MainActivity : AppCompatActivity() {
         }
 
         requestNotificationPermission()
+        if (savedInstanceState == null) showWhatsNew()
+    }
+
+    /** Release notes for the version that just installed itself, shown once. */
+    private fun showWhatsNew() {
+        val notes = CentiumApplication.instance.updateManager.prefs.consumeWhatsNew(BuildConfig.VERSION_CODE)
+        if (notes.isNullOrBlank()) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.whats_new_title, BuildConfig.VERSION_NAME))
+            .setMessage(plainNotes(notes))
+            .setPositiveButton(R.string.whats_new_dismiss, null)
+            .show()
+    }
+
+    /** Release notes are Markdown on GitHub; show them as plain text with bullets. */
+    private fun plainNotes(markdown: String): String = markdown.lines()
+        .filterNot { it.trim().startsWith("#") }
+        .joinToString("\n") { line ->
+            line.trimEnd()
+                .replace(Regex("^\\s*[-*]\\s+"), "• ")
+                .replace(Regex("\\*\\*(.+?)\\*\\*"), "$1")
+                .replace(Regex("`(.+?)`"), "$1")
+        }
+        .trim()
+
+    /** Shared by the Connect banner and Settings. */
+    fun installUpdate() {
+        val needsPermission = CentiumApplication.instance.updateManager.install() ?: return
+        Toast.makeText(this, R.string.update_allow_installs, Toast.LENGTH_LONG).show()
+        startActivity(needsPermission)
     }
 
     /** The VPN status notification is silently hidden on Android 13+ without this. */

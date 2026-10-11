@@ -39,6 +39,24 @@ Other notes:
   - If ndk-build reports a stale path, delete `android/app/.cxx` and `android/app/build/.cxx` and `android/app/build/intermediates/cxx`.
 - **Output:** `android/app/build/outputs/apk/debug/app-debug.apk`. The package is `org.centium.vpn.debug`.
 
+## Releasing and in-app updates
+
+- **Ship a release:**
+  1. Bump `centium.versionName` in `android/gradle.properties`.
+  2. Add a `## x.y.z` section to `CHANGELOG.md`, written for users.
+  3. Commit and push `main`, then `git tag vx.y.z && git push origin vx.y.z`.
+- **What CI does:** `.github/workflows/android-release.yml`
+  1. checks the tag matches the version;
+  2. builds and signs with the key in repo secrets (`CENTIUM_KEYSTORE_B64`, `CENTIUM_KEYSTORE_PASSWORD`, `CENTIUM_KEY_ALIAS`, `CENTIUM_KEY_PASSWORD`);
+  3. checks the signer against the `CENTIUM_SIGNER_SHA256` repo variable;
+  4. publishes `centium-x.y.z.apk` and a `.sha256`, using the changelog section as the notes.
+- **versionCode** is derived as `major*10000 + minor*100 + patch` and must only ever increase. Never reuse or lower a version.
+- **Release key:** `~/Android/centium-release/` (keystore + `signing.properties`), referenced from `android/local.properties` as `centium.signing`. If it's lost, every user must uninstall and reinstall. Never commit it.
+- **App side (`update/`):** `UpdateManager` checks GitHub `releases/latest` at most every 20h, after the VPN connects and only through Tor's SOCKS port. "Check now" in Settings goes direct when disconnected.
+  - **Verification:** `UpdateVerifier` requires a matching SHA-256, the same package, a higher versionCode and the same signing cert before `UpdateInstaller` (PackageInstaller session) runs.
+  - **After install:** `PackageReplacedReceiver` reconnects if the VPN was on, and `MainActivity` shows "What's new" once.
+  - **Debug builds:** `BuildConfig.UPDATES_ENABLED` is false (different package and key).
+
 ## Testing on the emulator
 
 - **Boot:** the AVD is `centium_test` (API 34). Start it with:

@@ -179,6 +179,48 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Updates -->
+        <TextView
+            style="@style/Centium.SectionLabel"
+            android:text="@string/settings_group_updates" />
+
+        <LinearLayout style="@style/Centium.Group">
+
+            <LinearLayout style="@style/Centium.Row">
+                <LinearLayout style="@style/Centium.RowText">
+                    <TextView style="@style/Centium.RowTitle" android:text="@string/settings_auto_update" />
+                    <TextView style="@style/Centium.RowSummary" android:text="@string/settings_auto_update_summary" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchAutoUpdate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:contentDescription="@string/settings_auto_update" />
+            </LinearLayout>
+
+            <View style="@style/Centium.Divider" />
+
+            <LinearLayout style="@style/Centium.Row">
+                <LinearLayout style="@style/Centium.RowText">
+                    <TextView
+                        android:id="@+id/tvUpdateVersion"
+                        style="@style/Centium.RowTitle" />
+                    <TextView
+                        android:id="@+id/tvUpdateStatus"
+                        style="@style/Centium.RowSummary"
+                        android:accessibilityLiveRegion="polite" />
+                </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCheckUpdate"
+                    style="@style/Widget.Centium.Button.Text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="@string/update_check_now" />
+            </LinearLayout>
+        </LinearLayout>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSaveSettings"
             style="@style/Widget.Centium.Button.Primary"

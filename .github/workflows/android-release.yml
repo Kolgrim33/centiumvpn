@@ -1,0 +1,84 @@
+# Builds, signs and publishes the Android app when a version tag is pushed.
+# Release: bump centium.versionName in android/gradle.properties, add a matching
+# "## x.y.z" section to CHANGELOG.md, then `git tag vx.y.z && git push origin vx.y.z`.
+name: Android release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Check tag matches app version
+        run: |
+          version=$(grep '^centium.versionName=' android/gradle.properties | cut -d= -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match centium.versionName=$version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Extract release notes
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## " { if (found) exit; if ($2 == v) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "::error::CHANGELOG.md has no '## $VERSION' section"
+            exit 1
+          fi
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-37.1" "build-tools;36.0.0" "ndk;26.3.11579264" > /dev/null
+
+      - name: Build signed release
+        working-directory: android
+        env:
+          KEYSTORE_B64: ${{ secrets.CENTIUM_KEYSTORE_B64 }}
+          CENTIUM_KEYSTORE_PASSWORD: ${{ secrets.CENTIUM_KEYSTORE_PASSWORD }}
+          CENTIUM_KEY_ALIAS: ${{ secrets.CENTIUM_KEY_ALIAS }}
+          CENTIUM_KEY_PASSWORD: ${{ secrets.CENTIUM_KEY_PASSWORD }}
+        run: |
+          export CENTIUM_KEYSTORE="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_B64" | base64 -d > "$CENTIUM_KEYSTORE"
+          ./gradlew assembleRelease --no-daemon --console=plain
+          rm -f "$CENTIUM_KEYSTORE"
+
+      - name: Verify signer and package
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          signer=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          # Pinned so a wrong or rotated key can never ship silently
+          if [ "$signer" != "${{ vars.CENTIUM_SIGNER_SHA256 }}" ]; then
+            echo "::error::APK signer $signer is not the Centium release key"
+            exit 1
+          fi
+          mkdir dist
+          cp "$apk" "dist/centium-$VERSION.apk"
+          (cd dist && sha256sum "centium-$VERSION.apk" > "centium-$VERSION.apk.sha256")
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "Centium $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md"

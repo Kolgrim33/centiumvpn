@@ -11,10 +11,12 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import org.centium.vpn.CentiumApplication
 import org.centium.vpn.R
 import org.centium.vpn.data.CircuitNode
 import org.centium.vpn.data.ConnectionState
 import org.centium.vpn.databinding.FragmentConnectionBinding
+import org.centium.vpn.update.UpdateManager
 import org.centium.vpn.vpn.CentiumVpnService
 import org.centium.vpn.vpn.VpnLifecycleManager
 
@@ -68,7 +70,22 @@ class ConnectionFragment : Fragment() {
             }
         }
 
+        binding.btnInstallUpdate.setOnClickListener { (activity as? MainActivity)?.installUpdate() }
+
         observeServiceState()
+        observeUpdates()
+    }
+
+    private fun observeUpdates() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            CentiumApplication.instance.updateManager.state.collect { state ->
+                val ready = state as? UpdateManager.State.Ready
+                binding.updateBanner.visibility = if (ready != null) View.VISIBLE else View.GONE
+                if (ready != null) {
+                    binding.tvUpdateTitle.text = getString(R.string.update_banner_title, ready.release.version.toString())
+                }
+            }
+        }
     }
 
     private fun handleConnectToggle() {

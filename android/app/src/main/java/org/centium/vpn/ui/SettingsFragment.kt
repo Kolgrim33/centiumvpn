@@ -10,12 +10,18 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import java.util.Locale
 import org.centium.vpn.CentiumApplication
 import org.centium.vpn.R
 import org.centium.vpn.data.BridgeMode
 import org.centium.vpn.data.BridgeType
+import org.centium.vpn.data.ConnectionState
 import org.centium.vpn.databinding.FragmentSettingsBinding
+import org.centium.vpn.update.UpdateManager
+import org.centium.vpn.vpn.CentiumVpnService
 
 class SettingsFragment : Fragment() {
 
@@ -67,6 +73,8 @@ class SettingsFragment : Fragment() {
             }
         }
 
+        setUpUpdates()
+
         binding.btnSaveSettings.setOnClickListener {
             val custom = binding.rbBridgeCustom.isChecked
             val updated = currentConfig.copy(
@@ -79,6 +87,56 @@ class SettingsFragment : Fragment() {
             )
             prefsRepo.saveConfig(updated)
             Toast.makeText(requireContext(), R.string.settings_saved, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setUpUpdates() {
+        val updates = CentiumApplication.instance.updateManager
+        binding.tvUpdateVersion.text = getString(R.string.update_version_title, updates.currentVersion)
+
+        if (!updates.enabled) {
+            binding.switchAutoUpdate.isEnabled = false
+            binding.btnCheckUpdate.visibility = View.GONE
+            binding.tvUpdateStatus.setText(R.string.update_status_disabled)
+            return
+        }
+
+        binding.switchAutoUpdate.isChecked = updates.prefs.autoUpdate
+        binding.switchAutoUpdate.setOnCheckedChangeListener { _, checked -> updates.prefs.autoUpdate = checked }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            updates.state.combine(CentiumVpnService.connectionState) { s, c -> s to c }.collect { (state, conn) ->
+                renderUpdateState(state, conn == ConnectionState.CONNECTED)
+            }
+        }
+    }
+
+    private fun renderUpdateState(state: UpdateManager.State, viaTor: Boolean) {
+        val button = binding.btnCheckUpdate
+        val status = binding.tvUpdateStatus
+        button.isEnabled = true
+        button.setText(R.string.update_check_now)
+        button.setOnClickListener { CentiumApplication.instance.updateManager.checkNow() }
+
+        when (state) {
+            UpdateManager.State.Idle -> status.setText(
+                if (viaTor) R.string.update_status_idle_connected else R.string.update_status_idle_direct
+            )
+            UpdateManager.State.Checking -> {
+                status.setText(R.string.update_status_checking)
+                button.isEnabled = false
+            }
+            is UpdateManager.State.UpToDate -> status.setText(R.string.update_status_up_to_date)
+            is UpdateManager.State.Downloading -> {
+                status.text = getString(R.string.update_status_downloading, state.version.toString())
+                button.isEnabled = false
+            }
+            is UpdateManager.State.Ready -> {
+                status.text = getString(R.string.update_status_ready, state.release.version.toString())
+                button.setText(R.string.update_install)
+                button.setOnClickListener { (activity as? MainActivity)?.installUpdate() }
+            }
+            is UpdateManager.State.Failed -> status.text = getString(R.string.update_status_failed, state.reason)
         }
     }
 

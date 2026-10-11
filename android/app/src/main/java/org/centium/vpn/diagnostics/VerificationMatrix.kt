@@ -79,17 +79,18 @@ class VerificationMatrix {
             client.newCall(req).await().use { resp ->
                 if (resp.isSuccessful) {
                     val json = Gson().fromJson(resp.body?.string(), JsonObject::class.java)
-                    val country = json?.get("country")?.asString ?: "Tor Relay"
+                    // Blank when unknown; the UI then just says "a Tor exit"
+                    val country = json?.get("country")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
                     val code = json?.get("country_code")?.asString ?: "--"
                     country to code
                 } else {
-                    "Tor Relay" to "--"
+                    "" to "--"
                 }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            "Tor Relay" to "--"
+            "" to "--"
         }
     }
 

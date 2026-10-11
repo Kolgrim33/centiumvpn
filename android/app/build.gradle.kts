@@ -1,5 +1,37 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
+}
+
+val centiumVersionName = providers.gradleProperty("centium.versionName").get()
+
+/** 1.2.3 -> 10203; must only ever increase, Android rejects lower codes as updates. */
+fun versionCodeOf(name: String): Int {
+    val parts = name.split(".").map { it.toInt() }
+    require(parts.size == 3 && parts.all { it in 0..99 }) { "centium.versionName must be x.y.z with parts 0-99" }
+    return parts[0] * 10000 + parts[1] * 100 + parts[2]
+}
+
+/**
+ * Release signing: CI passes CENTIUM_* env vars; locally, local.properties may point
+ * `centium.signing` at a properties file outside the repo. Without either, release is unsigned.
+ */
+fun releaseSigning(): Map<String, String>? {
+    val env = System.getenv()
+    if (env["CENTIUM_KEYSTORE"] != null) {
+        return mapOf(
+            "storeFile" to env.getValue("CENTIUM_KEYSTORE"),
+            "storePassword" to env.getValue("CENTIUM_KEYSTORE_PASSWORD"),
+            "keyAlias" to env.getValue("CENTIUM_KEY_ALIAS"),
+            "keyPassword" to env.getValue("CENTIUM_KEY_PASSWORD")
+        )
+    }
+    val local = rootProject.file("local.properties")
+    if (!local.exists()) return null
+    val path = Properties().apply { local.inputStream().use { load(it) } }.getProperty("centium.signing") ?: return null
+    val props = Properties().apply { file(path).inputStream().use { load(it) } }
+    return props.stringPropertyNames().associateWith { props.getProperty(it) }
 }
 
 android {
@@ -15,8 +47,8 @@ android {
         applicationId = "org.centium.vpn"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = versionCodeOf(centiumVersionName)
+        versionName = centiumVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -40,8 +72,22 @@ android {
         }
     }
 
+    val signing = releaseSigning()
+    if (signing != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(signing.getValue("storeFile"))
+                storePassword = signing.getValue("storePassword")
+                keyAlias = signing.getValue("keyAlias")
+                keyPassword = signing.getValue("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (signing != null) signingConfig = signingConfigs.getByName("release")
+            buildConfigField("boolean", "UPDATES_ENABLED", "true")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -51,6 +97,8 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            // Debug builds have their own package and key, so release updates can't apply
+            buildConfigField("boolean", "UPDATES_ENABLED", "false")
             applicationIdSuffix = ".debug"
         }
     }

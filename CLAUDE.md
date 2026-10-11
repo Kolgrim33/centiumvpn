@@ -96,7 +96,7 @@ The concept is a transit map of the Tor route. On the Connect screen, `ui/RouteL
 
 ## Website (`website/`)
 
-- **What:** a static download page at https://centium.web.app, on Firebase Hosting (project `centium-app`, site `centium`, Spark plan). No build step: `website/public/` is served as is. The older `centium-vpn` Firebase project is unrelated and unused.
+- **What:** a static download page at https://centium.web.app, on Firebase Hosting (project `centium-app`, site `centium`, Spark plan). No build step: `website/public/` is served as is.
 - **Download link:** the page reads GitHub `releases/latest` and links the `centium-*.apk` asset and its SHA-256, so releases don't need a redeploy. Without JS the button opens the releases page.
 - **Counter:** each press sends one Firestore REST commit adding 1 to `stats/downloads.count`. `firestore.rules` allows only that: no reads, no other writes. The count isn't shown on the page.
   - Read it with `cd website && npm run downloads` (uses the Firebase CLI login; also prints GitHub's APK download total).

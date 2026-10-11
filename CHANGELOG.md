@@ -3,6 +3,11 @@
 Each `## x.y.z` section becomes the GitHub release notes and the in-app
 "What's new" dialog. Write for users: what changed for them, in plain words.
 
+## 1.1.1
+- Installing your first update is smoother: after you allow Centium to install updates, it carries on by itself instead of asking you to tap Install again.
+- Buttons that can't be used right now, like Check now during a download, look greyed out.
+- Dialogs such as this one match the rest of Centium.
+
 ## 1.1.0
 - Centium now updates itself. New versions download in the background through Tor, and you install them with one tap.
 - After an update, this screen shows you what changed.

@@ -3,6 +3,10 @@
 Each `## x.y.z` section becomes the GitHub release notes and the in-app
 "What's new" dialog. Write for users: what changed for them, in plain words.
 
+## 1.2.0
+- Centium is now free software under the GPL-3.0 license, and coming to F-Droid.
+- The exit country now comes from the Tor Project's own relay directory, through Tor, instead of a third-party lookup service.
+
 ## 1.1.1
 - Installing your first update is smoother: after you allow Centium to install updates, it carries on by itself instead of asking you to tap Install again.
 - Buttons that can't be used right now, like Check now during a download, look greyed out.

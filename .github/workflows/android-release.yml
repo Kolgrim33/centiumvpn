@@ -58,12 +58,12 @@ jobs:
         run: |
           export CENTIUM_KEYSTORE="$RUNNER_TEMP/release.jks"
           echo "$KEYSTORE_B64" | base64 -d > "$CENTIUM_KEYSTORE"
-          ./gradlew assembleRelease --no-daemon --console=plain
+          ./gradlew assembleGithubRelease --no-daemon --console=plain
           rm -f "$CENTIUM_KEYSTORE"
 
       - name: Verify signer and package
         run: |
-          apk=android/app/build/outputs/apk/release/app-release.apk
+          apk=android/app/build/outputs/apk/github/release/app-github-release.apk
           signer=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" \
             | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
           # Pinned so a wrong or rotated key can never ship silently

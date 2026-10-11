@@ -1,0 +1,30 @@
+Categories:
+  - Security
+  - VPN & Proxy
+License: GPL-3.0-only
+AuthorName: Selby Mashiki
+SourceCode: https://github.com/Kolgrim33/centiumvpn
+IssueTracker: https://github.com/Kolgrim33/centiumvpn/issues
+Changelog: https://github.com/Kolgrim33/centiumvpn/blob/HEAD/CHANGELOG.md
+
+AutoName: Centium VPN
+
+RepoType: git
+Repo: https://github.com/Kolgrim33/centiumvpn.git
+
+Builds:
+  - versionName: 1.2.0
+    versionCode: 10200
+    commit: v1.2.0
+    subdir: android/app
+    submodules: true
+    gradle:
+      - fdroid
+    scandelete:
+      - android/app/src/main/jni/hev-socks5-tunnel/third-part/wintun
+    ndk: r26d
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
+CurrentVersion: 1.2.0
+CurrentVersionCode: 10200

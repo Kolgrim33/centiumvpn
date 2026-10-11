@@ -5,6 +5,8 @@ import com.google.gson.JsonObject
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.util.IllformedLocaleException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -73,19 +75,27 @@ class VerificationMatrix {
         }
     }
 
+    /**
+     * Country of the exit, from Onionoo (the Tor Project's relay directory), queried
+     * through Tor. Returns (localized name, ISO code); blank name when unknown.
+     */
     private suspend fun resolveCountry(client: OkHttpClient, ip: String): Pair<String, String> {
         return try {
-            val req = Request.Builder().url("https://ipwho.is/$ip").build()
+            val url = "https://onionoo.torproject.org/details?search=$ip&fields=country&limit=1"
+            val req = Request.Builder().url(url).header("User-Agent", "Centium-Android/1.0").build()
             client.newCall(req).await().use { resp ->
-                if (resp.isSuccessful) {
-                    val json = Gson().fromJson(resp.body?.string(), JsonObject::class.java)
-                    // Blank when unknown; the UI then just says "a Tor exit"
-                    val country = json?.get("country")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
-                    val code = json?.get("country_code")?.asString ?: "--"
-                    country to code
-                } else {
-                    "" to "--"
+                if (!resp.isSuccessful) return "" to "--"
+                val json = Gson().fromJson(resp.body?.string(), JsonObject::class.java)
+                val code = json?.getAsJsonArray("relays")?.firstOrNull()
+                    ?.asJsonObject?.get("country")?.takeUnless { it.isJsonNull }?.asString
+                    ?.uppercase(Locale.ROOT)
+                    ?: return "" to "--"
+                val name = try {
+                    Locale.Builder().setRegion(code).build().displayCountry
+                } catch (_: IllformedLocaleException) {
+                    ""
                 }
+                name to code
             }
         } catch (e: CancellationException) {
             throw e

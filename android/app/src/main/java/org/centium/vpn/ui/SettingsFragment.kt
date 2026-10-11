@@ -94,10 +94,10 @@ class SettingsFragment : Fragment() {
         val updates = CentiumApplication.instance.updateManager
         binding.tvUpdateVersion.text = getString(R.string.update_version_title, updates.currentVersion)
 
+        // F-Droid and test builds get updates elsewhere
         if (!updates.enabled) {
-            binding.switchAutoUpdate.isEnabled = false
-            binding.btnCheckUpdate.visibility = View.GONE
-            binding.tvUpdateStatus.setText(R.string.update_status_disabled)
+            binding.labelUpdates.visibility = View.GONE
+            binding.groupUpdates.visibility = View.GONE
             return
         }
 

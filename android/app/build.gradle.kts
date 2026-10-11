@@ -87,7 +87,6 @@ android {
     buildTypes {
         release {
             if (signing != null) signingConfig = signingConfigs.getByName("release")
-            buildConfigField("boolean", "UPDATES_ENABLED", "true")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -100,6 +99,20 @@ android {
             // Debug builds have their own package and key, so release updates can't apply
             buildConfigField("boolean", "UPDATES_ENABLED", "false")
             applicationIdSuffix = ".debug"
+        }
+    }
+
+    // github: self-updates from GitHub Releases. fdroid: F-Droid delivers updates,
+    // so the updater is switched off and its permission/receivers are stripped.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            buildConfigField("boolean", "UPDATES_ENABLED", "true")
+        }
+        create("fdroid") {
+            dimension = "distribution"
+            buildConfigField("boolean", "UPDATES_ENABLED", "false")
         }
     }
 

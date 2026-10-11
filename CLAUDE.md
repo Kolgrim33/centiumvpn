@@ -37,7 +37,8 @@ Other notes:
   - Keep `--max-workers=2`. A full parallel build, which includes NDK builds for 4 ABIs, has OOM-killed this machine.
   - The SDK is at `~/Android/Sdk`, set in `android/local.properties` (gitignored).
   - If ndk-build reports a stale path, delete `android/app/.cxx` and `android/app/build/.cxx` and `android/app/build/intermediates/cxx`.
-- **Output:** `android/app/build/outputs/apk/debug/app-debug.apk`. The package is `org.centium.vpn.debug`.
+- **Flavors:** `github` (self-updater on) and `fdroid` (updater off, and `src/fdroid/AndroidManifest.xml` strips `REQUEST_INSTALL_PACKAGES` and the update receivers). Build one with e.g. `assembleGithubDebug` or `assembleFdroidRelease`. A bare `assembleDebug` builds both.
+- **Output:** `android/app/build/outputs/apk/<flavor>/<type>/`. Debug builds use the package `org.centium.vpn.debug` and release builds `org.centium.vpn`.
 
 ## Releasing and in-app updates
 
@@ -57,6 +58,14 @@ Other notes:
   - **After install:** `PackageReplacedReceiver` reconnects if the VPN was on, and `MainActivity` shows "What's new" once.
   - **Debug builds:** `BuildConfig.UPDATES_ENABLED` is false (different package and key).
 
+## F-Droid
+
+- **Licensing:** the app is GPL-3.0 (`LICENSE`).
+- **Store listing:** `fastlane/metadata/android/en-US/`. For each release, add `changelogs/<versionCode>.txt` (at most 500 chars) with the same text as the CHANGELOG section.
+- **Build recipe:** `docs/fdroid/org.centium.vpn.yml` is the fdroiddata recipe (fdroid flavor, `submodules: true`, ndk r26d). After the first acceptance, F-Droid picks up new `vX.Y.Z` tags automatically (`UpdateCheckMode: Tags`). Submission steps are in `docs/fdroid/SUBMITTING.md`.
+- **Signing:** F-Droid signs its own builds, so GitHub and F-Droid installs can't update each other.
+- **Policy:** don't add non-free dependencies or network services. The only services contacted are check.torproject.org and onionoo.torproject.org (both through Tor), plus the GitHub API in the github flavor.
+
 ## Testing on the emulator
 
 - **Boot:** the AVD is `centium_test` (API 34). Start it with:
@@ -70,6 +79,7 @@ Other notes:
   ```
   Then confirm the IP is a Tor exit at `onionoo.torproject.org/details?search=<ip>`.
 - **ANR dialogs:** "System UI isn't responding" dialogs come from the slow emulator, not the app.
+- **Broken network after boot:** the emulator sometimes boots with no IPv4 ("connect: Network is unreachable"), and then Tor times out at 0%. Cold boot it with `-no-snapshot-load`.
 - **SELinux noise:** `avc: denied { ioctl }` lines from `tor` are harmless.
 
 ## UI design system (Android)

@@ -98,7 +98,6 @@
     <string name="update_status_downloading">Downloading version %1$s…</string>
     <string name="update_status_ready">Version %1$s is ready to install</string>
     <string name="update_status_failed">Update failed: %1$s</string>
-    <string name="update_status_disabled">Test builds don\'t update. Install a release from GitHub.</string>
     <string name="update_banner_title">Version %1$s is ready</string>
     <string name="update_banner_body">Centium restarts to install it and reconnects on its own.</string>
     <string name="update_allow_installs">Allow Centium to install updates, then come back. The update continues on its own.</string>

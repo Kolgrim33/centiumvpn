@@ -85,3 +85,15 @@ sudo centium-network disable
 - **Tauri / Rust Stubs**: Any code in `src-tauri/` or reference Rust daemon definitions are illustrative stubs. The active production daemon and user interface run on the Node.js / Vite engine.
 - **Android Port (`android/`)**: Complete native Kotlin implementation using Android's `VpnService`, embedded Tor runtime, native `hev-socks5-tunnel` JNI bridge, and zero-root architecture. See `android/README.md` for full Android build and testing instructions.
 
+---
+
+## License
+
+Centium is free software: you can redistribute it and/or modify it under the terms of the
+[GNU General Public License v3.0](LICENSE).
+
+It bundles third-party components under their own licenses:
+- [Tor](https://www.torproject.org/) via [tor-android](https://github.com/guardianproject/tor-android): BSD-3-Clause
+- [hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel): MIT
+- [Overpass](https://github.com/RedHatOfficial/Overpass) font: SIL Open Font License 1.1
+- AndroidX, Material Components, OkHttp, Gson, Kotlin coroutines: Apache-2.0

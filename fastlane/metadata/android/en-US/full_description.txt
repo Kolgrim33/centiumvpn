@@ -1,0 +1,23 @@
+<p>Centium sends all of your phone's traffic through the <b>Tor network</b>. Tap Connect, and every app reaches the internet through three Tor relays, so websites and your internet provider can't link what you do to who you are.</p>
+
+<p>Unlike a regular VPN, there is no company in the middle that sees everything. The relays are run by volunteers, and no single relay knows both who you are and where you go.</p>
+
+<p><b>What you get</b></p>
+<ul>
+<li>System-wide Tor: works for every app, not just a browser. No root needed.</li>
+<li>Your route at a glance: see the guard, middle and exit relays your traffic is using, and the country websites see you in.</li>
+<li>DNS through Tor: name lookups are resolved at the exit, never by your provider.</li>
+<li>Block traffic if Tor drops: apps stay offline instead of falling back to your real address.</li>
+<li>IPv6 blocking, exit-country choice, and your own bridge relays if Tor is blocked where you are.</li>
+<li>Checks: a built-in leak test that inspects your live connection.</li>
+<li>Works with Android's Always-on VPN and "Block connections without VPN".</li>
+</ul>
+
+<p><b>Good to know</b></p>
+<ul>
+<li>Tor is slower than a normal connection, and some websites block Tor.</li>
+<li>Apps that use UDP (most voice and video calls, many games) won't work while connected, because Tor carries TCP only.</li>
+<li>obfs4 and Snowflake bridges aren't supported yet; plain bridge relays are.</li>
+</ul>
+
+<p>Centium checks its exit with check.torproject.org and looks up the exit's country with the Tor Project's relay directory, both through Tor.</p>

@@ -262,15 +262,33 @@ class CentiumVpnService : VpnService() {
         } catch (_: IOException) {}
     }
 
+    /** Asks Tor for fresh circuits (NEWNYM), then refreshes the circuit shown in the UI. */
+    suspend fun requestNewCircuit(): Boolean {
+        if (_connectionState.value != ConnectionState.CONNECTED) return false
+        val ok = torManager.controller.signalNewnym()
+        if (ok) {
+            addLog("[Identity] NEWNYM sent. New connections will use fresh circuits.")
+            delay(3000)
+            _circuit.value = torManager.controller.getCircuits()
+        }
+        return ok
+    }
+
     private fun startSupervisionWatchdog(config: CentiumConfig) {
         supervisionJob?.cancel()
         supervisionJob = serviceScope.launch(Dispatchers.IO) {
+            var tick = 0
             while (isActive && _connectionState.value == ConnectionState.CONNECTED) {
                 delay(2000)
 
                 val stats = bridge.getTrafficStats()
                 _bytesReceived.value = stats.rxBytes
                 _bytesSent.value = stats.txBytes
+
+                // Tor rotates circuits for new streams; keep the displayed route current
+                if (++tick % 8 == 0) {
+                    torManager.controller.getCircuits().takeIf { it.isNotEmpty() }?.let { _circuit.value = it }
+                }
 
                 if (!torManager.isRunning() || !bridge.isBridgeActive()) {
                     val alertState = failClosedGuard.handleUnexpectedDrop(

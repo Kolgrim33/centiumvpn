@@ -1,11 +1,148 @@
-<resources>
-    <style name="Theme.CentiumVPN" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="android:statusBarColor">@color/centium_bg</item>
-        <item name="android:navigationBarColor">@color/centium_bg</item>
-        <item name="android:windowBackground">@color/centium_bg</item>
-        <item name="colorPrimary">@color/centium_primary</item>
-        <item name="colorSecondary">@color/centium_accent</item>
-        <item name="colorSurface">@color/centium_surface</item>
-        <item name="colorError">@color/centium_error</item>
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <style name="Theme.CentiumVPN" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/mist</item>
+        <item name="android:statusBarColor">@color/mist</item>
+        <item name="android:navigationBarColor">@color/paper</item>
+        <item name="android:windowLightStatusBar">@bool/light_system_bars</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/light_system_bars</item>
+
+        <!-- Overpass for Material components (radios, fields, menus, snackbars) -->
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.Centium.M3.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.Centium.M3.BodyMedium</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.Centium.M3.BodySmall</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.Centium.M3.LabelLarge</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.Centium.M3.LabelMedium</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Centium.M3.TitleMedium</item>
+
+        <item name="colorPrimary">@color/route</item>
+        <item name="colorOnPrimary">@color/on_route</item>
+        <item name="colorPrimaryContainer">@color/route_soft</item>
+        <item name="colorSecondaryContainer">@color/route_soft</item>
+        <item name="colorSurface">@color/paper</item>
+        <item name="colorOnSurface">@color/ink</item>
+        <item name="colorOnSurfaceVariant">@color/slate</item>
+        <item name="colorSurfaceContainer">@color/paper</item>
+        <item name="colorOutline">@color/rule</item>
+        <item name="colorError">@color/danger</item>
+        <item name="android:colorBackground">@color/mist</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/slate</item>
+    </style>
+
+    <style name="TextAppearance.Centium.M3.BodyLarge" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:fontFamily">@font/overpass_regular</item>
+        <item name="fontFamily">@font/overpass_regular</item>
+    </style>
+    <style name="TextAppearance.Centium.M3.BodyMedium" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:fontFamily">@font/overpass_regular</item>
+        <item name="fontFamily">@font/overpass_regular</item>
+    </style>
+    <style name="TextAppearance.Centium.M3.BodySmall" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:fontFamily">@font/overpass_regular</item>
+        <item name="fontFamily">@font/overpass_regular</item>
+    </style>
+    <style name="TextAppearance.Centium.M3.LabelLarge" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:fontFamily">@font/overpass_semibold</item>
+        <item name="fontFamily">@font/overpass_semibold</item>
+    </style>
+    <style name="TextAppearance.Centium.M3.LabelMedium" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:fontFamily">@font/overpass_semibold</item>
+        <item name="fontFamily">@font/overpass_semibold</item>
+    </style>
+    <style name="TextAppearance.Centium.M3.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:fontFamily">@font/overpass_semibold</item>
+        <item name="fontFamily">@font/overpass_semibold</item>
+    </style>
+
+    <!-- Type scale: 13 / 15 / 18 / 24 / 34 -->
+    <style name="TextAppearance.Centium.Display" parent="TextAppearance.Material3.HeadlineLarge">
+        <item name="android:fontFamily">@font/overpass_extrabold</item>
+        <item name="fontFamily">@font/overpass_extrabold</item>
+        <item name="android:textSize">34sp</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+
+    <style name="TextAppearance.Centium.Heading" parent="TextAppearance.Centium.Display">
+        <item name="android:textSize">24sp</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+
+    <style name="TextAppearance.Centium.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:fontFamily">@font/overpass_semibold</item>
+        <item name="fontFamily">@font/overpass_semibold</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+
+    <style name="TextAppearance.Centium.Body" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:fontFamily">@font/overpass_regular</item>
+        <item name="fontFamily">@font/overpass_regular</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:lineSpacingExtra">5sp</item>
+        <item name="android:textColor">@color/slate</item>
+    </style>
+
+    <style name="TextAppearance.Centium.Small" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:fontFamily">@font/overpass_regular</item>
+        <item name="fontFamily">@font/overpass_regular</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:lineSpacingExtra">3sp</item>
+        <item name="android:textColor">@color/slate</item>
+    </style>
+
+    <style name="TextAppearance.Centium.Section" parent="TextAppearance.Centium.Small">
+        <item name="android:fontFamily">@font/overpass_semibold</item>
+        <item name="fontFamily">@font/overpass_semibold</item>
+        <item name="android:textColor">@color/route</item>
+    </style>
+
+    <!-- Buttons -->
+    <style name="Widget.Centium.Button.Primary" parent="Widget.Material3.Button">
+        <item name="android:fontFamily">@font/overpass_semibold</item>
+        <item name="fontFamily">@font/overpass_semibold</item>
+        <item name="android:minHeight">60dp</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">18dp</item>
+        <item name="backgroundTint">@color/route</item>
+        <item name="android:textColor">@color/on_route</item>
+    </style>
+
+    <style name="Widget.Centium.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:fontFamily">@font/overpass_semibold</item>
+        <item name="fontFamily">@font/overpass_semibold</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textColor">@color/route</item>
+    </style>
+
+    <style name="Widget.Centium.BottomNav" parent="Widget.Material3.BottomNavigationView">
+        <item name="backgroundTint">@color/paper</item>
+        <item name="elevation">0dp</item>
+        <item name="labelVisibilityMode">labeled</item>
+        <item name="itemIconTint">@color/nav_item</item>
+        <item name="itemTextColor">@color/nav_item</item>
+        <item name="itemActiveIndicatorStyle">@style/Widget.Centium.BottomNav.Indicator</item>
+        <item name="itemTextAppearanceActive">@style/TextAppearance.Centium.NavLabel</item>
+        <item name="itemTextAppearanceInactive">@style/TextAppearance.Centium.NavLabel</item>
+    </style>
+
+    <style name="Widget.Centium.BottomNav.Indicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@color/route_soft</item>
+    </style>
+
+    <style name="TextAppearance.Centium.NavLabel" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:fontFamily">@font/overpass_regular</item>
+        <item name="fontFamily">@font/overpass_regular</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0</item>
     </style>
 </resources>

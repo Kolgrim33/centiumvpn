@@ -1,22 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Centium Brand Palette (Dark Cyberpunk / Privacy Theme) -->
-    <color name="centium_bg">#090D16</color>
-    <color name="centium_surface">#111827</color>
-    <color name="centium_surface_variant">#1F2937</color>
-    <color name="centium_border">#374151</color>
-    
-    <color name="centium_primary">#10B981</color>
-    <color name="centium_primary_variant">#059669</color>
-    <color name="centium_accent">#06B6D4</color>
-    <color name="centium_error">#EF4444</color>
-    <color name="centium_warning">#F59E0B</color>
+    <!-- Day palette: a cool transit-map ground with one route colour -->
+    <color name="mist">#E9ECEF</color>
+    <color name="paper">#F6F7F9</color>
+    <color name="rule">#D3D8DE</color>
+    <color name="ink">#161C27</color>
+    <color name="slate">#586274</color>
+    <color name="faint">#96A0AE</color>
+    <color name="route">#4A3FD0</color>
+    <color name="on_route">#FFFFFF</color>
+    <color name="route_soft">#DCD9F6</color>
+    <color name="danger">#B8322A</color>
+    <color name="caution">#94650A</color>
+    <color name="ok">#1D7A50</color>
 
-    <color name="text_primary">#F9FAFB</color>
-    <color name="text_secondary">#9CA3AF</color>
-    <color name="text_muted">#6B7280</color>
-
-    <color name="status_connected">#10B981</color>
-    <color name="status_connecting">#3B82F6</color>
-    <color name="status_disconnected">#6B7280</color>
-    <color name="status_error">#EF4444</color>
+    <!-- Launcher icon stays the same in day and night -->
+    <color name="launcher_ground">#4A3FD0</color>
 </resources>

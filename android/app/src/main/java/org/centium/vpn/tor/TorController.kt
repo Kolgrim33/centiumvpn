@@ -42,13 +42,18 @@ class TorController(
     suspend fun getCircuits(): List<CircuitNode> {
         val info = getInfo("circuit-status") ?: return emptyList()
         // Lines look like: 7 BUILT $FP~nick,$FP~nick,$FP~nick BUILD_FLAGS=... PURPOSE=GENERAL ...
-        val line = info.lines().firstOrNull {
-            it.contains(" BUILT ") && it.contains("PURPOSE=GENERAL")
-        } ?: return emptyList()
-
-        val parts = line.trim().split(" ")
-        if (parts.size < 3) return emptyList()
-        val hops = parts[2].split(",")
+        // Skip one-hop directory fetches and internal (onion-service) circuits; prefer the newest.
+        val hops = info.lines()
+            .map { it.trim().split(" ") }
+            .filter { parts ->
+                parts.size >= 3 && parts[1] == "BUILT" &&
+                    parts.any { it == "PURPOSE=GENERAL" } &&
+                    parts.none { it.startsWith("BUILD_FLAGS=") && ("ONEHOP_TUNNEL" in it || "IS_INTERNAL" in it) } &&
+                    parts[2].split(",").size >= 3
+            }
+            .maxByOrNull { it[0].toIntOrNull() ?: 0 }
+            ?.get(2)?.split(",")
+            ?: return emptyList()
 
         return hops.mapIndexed { index, hop ->
             val clean = hop.trim().trimStart('$')

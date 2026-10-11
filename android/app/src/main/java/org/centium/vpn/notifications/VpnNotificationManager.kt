@@ -57,14 +57,17 @@ class VpnNotificationManager(private val context: Context) {
 
         val contentText = when (state) {
             ConnectionState.CONNECTED -> {
-                if (exitIp != null) "Protected via Tor ($exitIp - ${country ?: "Exit"})"
-                else "All device traffic routed through Tor"
+                when {
+                    exitIp != null && !country.isNullOrBlank() && country != "Unknown" -> "Using Tor, exiting in $country ($exitIp)"
+                    exitIp != null -> "Using Tor, exiting at $exitIp"
+                    else -> "All apps are going through Tor"
+                }
             }
             else -> state.defaultMessage
         }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_vpn_lock)
+            .setSmallIcon(R.drawable.ic_centium_mark)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(contentText)
             .setContentIntent(pendingIntent)
@@ -73,7 +76,7 @@ class VpnNotificationManager(private val context: Context) {
 
         if (state.isConnected || state.isTransitioning || state == ConnectionState.ERROR) {
             builder.addAction(
-                R.drawable.ic_vpn_lock,
+                R.drawable.ic_centium_mark,
                 context.getString(R.string.action_disconnect),
                 disconnectPending
             )

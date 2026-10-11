@@ -3,78 +3,66 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/centium_bg"
-    android:padding="16dp">
+    android:orientation="vertical">
 
-    <!-- Header & Action Card -->
-    <LinearLayout
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/pbAuditLoading"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@drawable/card_background"
-        android:padding="16dp"
-        android:layout_marginBottom="12dp">
+        android:indeterminate="true"
+        android:visibility="invisible"
+        app:indicatorColor="@color/route"
+        app:trackColor="@color/route_soft"
+        app:trackThickness="2dp" />
 
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="10-LAYER AUDIT SUITE"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tvAuditSummary"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Not tested yet"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:layout_marginTop="2dp" />
-
-        </LinearLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnRunAudit"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Run Audit"
-            android:textColor="@color/text_primary"
-            android:backgroundTint="@color/centium_accent"
-            app:cornerRadius="10dp" />
-
-    </LinearLayout>
-
-    <ProgressBar
-        android:id="@+id/pbAuditLoading"
-        style="?android:attr/progressBarStyle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:visibility="gone"
-        android:layout_margin="16dp" />
-
-    <!-- 10 Layers ScrollView -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true">
+        android:layout_weight="1">
 
         <LinearLayout
-            android:id="@+id/llLayerResults"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="18dp"
+            android:paddingBottom="28dp">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/checks_title"
+                    android:accessibilityHeading="true"
+                    android:textAppearance="@style/TextAppearance.Centium.Heading" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRunAudit"
+                    style="@style/Widget.Centium.Button.Text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/checks_run" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvAuditSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:accessibilityLiveRegion="polite"
+                android:textAppearance="@style/TextAppearance.Centium.Body" />
+
+            <LinearLayout
+                android:id="@+id/llLayerResults"
+                style="@style/Centium.Group"
+                android:layout_marginTop="20dp"
+                android:visibility="gone" />
+        </LinearLayout>
     </ScrollView>
-
 </LinearLayout>

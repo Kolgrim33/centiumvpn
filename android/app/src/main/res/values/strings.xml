@@ -1,51 +1,91 @@
 <resources>
     <string name="app_name">Centium VPN</string>
+    <string name="wordmark">Centium</string>
     <string name="tile_name">Centium</string>
-    <string name="app_tagline">Tor-Powered System-Wide VPN</string>
 
-    <!-- Connection States -->
-    <string name="state_disconnected">Disconnected</string>
-    <string name="state_starting_tor">Starting Tor Engine</string>
-    <string name="state_waiting_bootstrap">Bootstrapping Circuit</string>
-    <string name="state_starting_bridge">Initializing Native Bridge</string>
-    <string name="state_establishing_vpn">Establishing TUN Device</string>
-    <string name="state_configuring_dns">Activating Tor DNS</string>
-    <string name="state_verifying">Auditing Security Matrix</string>
-    <string name="state_connected">Protected by Centium VPN</string>
-    <string name="state_reconnecting">Reconnecting</string>
-    <string name="state_disconnecting">Disconnecting</string>
-    <string name="state_error">Connection Error</string>
+    <!-- Navigation -->
+    <string name="nav_connect">Connect</string>
+    <string name="nav_checks">Checks</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_logs">Logs</string>
+
+    <!-- Connect screen: headline + body per state -->
+    <string name="headline_off">Not using Tor</string>
+    <string name="body_off">Apps reach the internet from your own address. Connect to send them through three Tor relays instead.</string>
+    <string name="headline_building">Building circuit</string>
+    <string name="body_bootstrap">Reaching the Tor network, %1$d%%</string>
+    <string name="body_tunnel">Starting the tunnel for your apps</string>
+    <string name="body_verifying">Checking the address sites will see</string>
+    <string name="headline_on">Using Tor</string>
+    <string name="body_on">Every app on this phone now reaches the internet through Tor.</string>
+    <string name="headline_error">Couldn\'t connect</string>
+    <string name="headline_blocked">Traffic blocked</string>
+    <string name="body_blocked">Tor stopped, so Centium is blocking all traffic to keep your address hidden. Reconnect, or disconnect to go back to a direct connection.</string>
+    <string name="headline_disconnecting">Disconnecting</string>
+    <string name="body_disconnecting">Closing the tunnel and stopping Tor</string>
+
+    <!-- Connect screen: route stations -->
+    <string name="station_phone">This phone</string>
+    <string name="station_phone_off">Your provider sees every site you visit</string>
+    <string name="station_phone_on">Your provider sees only that you use Tor</string>
+    <string name="station_guard">Guard</string>
+    <string name="station_guard_desc">Knows your address, not where you go</string>
+    <string name="station_middle">Middle</string>
+    <string name="station_middle_desc">Knows neither who you are nor where you go</string>
+    <string name="station_exit">Exit</string>
+    <string name="station_exit_desc">Knows where you go, not who you are</string>
+    <string name="station_internet">The internet</string>
+    <string name="station_internet_off">Sites see your real address</string>
+    <string name="station_internet_on">Sites see a Tor exit</string>
+    <string name="station_internet_on_country">Sites see a Tor exit in %1$s</string>
+    <string name="traffic">↓\u00A0%1$s\u2003↑\u00A0%2$s</string>
 
     <!-- Actions -->
     <string name="action_connect">Connect</string>
     <string name="action_disconnect">Disconnect</string>
     <string name="action_cancel">Cancel</string>
-    <string name="action_diagnostics">Run Diagnostics</string>
-    <string name="action_new_identity">New Tor Identity</string>
-
-    <!-- Metrics -->
-    <string name="metric_circuit">Tor Circuit</string>
-    <string name="metric_traffic">Traffic</string>
-    <string name="metric_download">Download</string>
-    <string name="metric_upload">Upload</string>
-    <string name="metric_duration">Session Duration</string>
-    <string name="metric_exit_ip">Exit IP</string>
+    <string name="action_disconnecting">Disconnecting…</string>
+    <string name="action_new_circuit">New circuit</string>
+    <string name="new_circuit_done">New connections will use a fresh circuit</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
-    <string name="settings_bridge_mode">Tor Bridge Mode</string>
-    <string name="settings_exit_node">Exit Country</string>
-    <string name="settings_kill_switch">Fail-Closed Kill Switch</string>
-    <string name="settings_kill_switch_summary">Blocks network traffic if Tor circuit or TUN tunnel drops unexpectedly.</string>
-    <string name="settings_dns_protection">Tor DNS Enforcement</string>
-    <string name="settings_dns_protection_summary">Forces all UDP/TCP 53 requests through Tor DNSPort (9053).</string>
-    <string name="settings_block_ipv6">Block IPv6 Leakage</string>
-    <string name="settings_block_ipv6_summary">Prevents direct ISP IPv6 egress when IPv6 is not available over Tor.</string>
-    <string name="settings_always_on">System Always-on VPN Settings</string>
+    <string name="settings_group_safety">Safety</string>
+    <string name="settings_kill_switch">Block traffic if Tor drops</string>
+    <string name="settings_kill_switch_summary">If Tor or the tunnel stops unexpectedly, apps stay offline instead of falling back to your real address.</string>
+    <string name="settings_block_ipv6">Block IPv6</string>
+    <string name="settings_block_ipv6_summary">Drop IPv6 traffic instead of sending it through Tor. Turn this off only if a site needs IPv6.</string>
+    <string name="settings_always_on">Always-on VPN</string>
+    <string name="settings_always_on_summary">For the strongest protection, make Centium always-on and turn on Block connections without VPN in Android settings.</string>
+    <string name="settings_open">Open</string>
+    <string name="settings_group_exit">Exit country</string>
+    <string name="settings_exit_summary">Choosing a country can make connections slower and your traffic easier to single out.</string>
+    <string name="settings_exit_any">Any country</string>
+    <string name="settings_group_bridges">Bridges</string>
+    <string name="settings_bridges_summary">If Tor is blocked where you are, a bridge relay can get you onto the network.</string>
+    <string name="settings_bridges_direct">Connect directly</string>
+    <string name="settings_bridges_custom">Use my own bridges</string>
+    <string name="settings_bridges_hint">One bridge per line, as IP:port fingerprint</string>
+    <string name="settings_bridges_note">obfs4 and Snowflake bridges aren\'t supported yet.</string>
+    <string name="settings_save">Save settings</string>
+    <string name="settings_save_note">Changes apply the next time you connect.</string>
+    <string name="settings_saved">Settings saved</string>
+
+    <!-- Checks -->
+    <string name="checks_title">Checks</string>
+    <string name="checks_summary">%1$d of %2$d passed</string>
+    <string name="checks_running">Running checks…</string>
+    <string name="checks_run">Run again</string>
+    <string name="checks_empty">Connect first. These checks inspect a live connection for leaks.</string>
+
+    <!-- Logs -->
+    <string name="logs_title">Logs</string>
+    <string name="logs_copy">Copy</string>
+    <string name="logs_copied">Logs copied</string>
+    <string name="logs_empty">Nothing yet. Logs appear here once you connect.</string>
 
     <!-- Notification -->
-    <string name="notif_channel_vpn">Centium VPN Status</string>
-    <string name="notif_channel_vpn_desc">Shows ongoing VPN connection status and metrics.</string>
-    <string name="notif_connected_title">Centium VPN Active</string>
-    <string name="notif_connected_desc">All device traffic is encrypted through the Tor network.</string>
+    <string name="notif_channel_vpn">Connection status</string>
+    <string name="notif_channel_vpn_desc">Shows whether your traffic is going through Tor.</string>
+    <string name="vpn_permission_required">Centium needs VPN permission to send your traffic through Tor.</string>
 </resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mist">#12161D</color>
+    <color name="paper">#1A1F28</color>
+    <color name="rule">#2B323D</color>
+    <color name="ink">#E7EAEF</color>
+    <color name="slate">#9AA3B2</color>
+    <color name="faint">#5F6878</color>
+    <color name="route">#9C93FF</color>
+    <color name="on_route">#12161D</color>
+    <color name="route_soft">#2C2952</color>
+    <color name="danger">#F0766C</color>
+    <color name="caution">#E0AE45</color>
+    <color name="ok">#5CC593</color>
+</resources>

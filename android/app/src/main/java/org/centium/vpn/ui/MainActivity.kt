@@ -9,13 +9,8 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import org.centium.vpn.R
-import org.centium.vpn.data.ConnectionState
 import org.centium.vpn.databinding.ActivityMainBinding
-import org.centium.vpn.vpn.CentiumVpnService
 import org.centium.vpn.vpn.VpnLifecycleManager
 
 class MainActivity : AppCompatActivity() {
@@ -61,7 +56,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        observeServiceStatus()
         requestNotificationPermission()
     }
 
@@ -84,28 +78,13 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNav.selectedItemId = R.id.nav_diagnostics
     }
 
-    private fun observeServiceStatus() {
-        lifecycleScope.launch {
-            CentiumVpnService.connectionState.collectLatest { state ->
-                binding.headerStatusBadge.text = state.name
-                val color = when (state) {
-                    ConnectionState.CONNECTED -> getColor(R.color.status_connected)
-                    ConnectionState.ERROR -> getColor(R.color.status_error)
-                    ConnectionState.DISCONNECTED -> getColor(R.color.status_disconnected)
-                    else -> getColor(R.color.status_connecting)
-                }
-                binding.headerStatusBadge.setTextColor(color)
-            }
-        }
-    }
-
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VPN_PREPARE_REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK) {
                 vpnManager.startVpnService()
             } else {
-                Toast.makeText(this, "VPN permission is required to route traffic through Tor.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, R.string.vpn_permission_required, Toast.LENGTH_LONG).show()
             }
         }
     }

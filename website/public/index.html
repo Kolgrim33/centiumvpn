@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Centium: every app through Tor</title>
+  <meta name="description" content="Centium sends all of your Android phone's traffic through the Tor network with one tap. Free and open source.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/overpass-extrabold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="bar wrap">
+    <a class="brand" href="/">
+      <span class="mark" aria-hidden="true"></span>
+      <span>Centium</span>
+    </a>
+    <a class="bar-link" href="https://github.com/Kolgrim33/centiumvpn">Source code</a>
+  </header>
+
+  <main>
+    <section class="hero wrap">
+      <div class="hero-text">
+        <h1>Every app on your phone, through Tor.</h1>
+        <p class="lede">Tap Connect and all of your phone's traffic reaches the internet through three Tor relays. Websites and your internet provider can't link what you do to who you are.</p>
+
+        <div class="get">
+          <a id="download" class="button" href="https://github.com/Kolgrim33/centiumvpn/releases/latest">Download for Android</a>
+          <p class="meta">
+            <span id="version">Free and open source</span>
+            <span class="dot" aria-hidden="true">·</span>
+            <span>Android 8 or newer</span>
+          </p>
+          <p class="checksum" id="checksum" hidden>SHA-256 <code id="sha"></code></p>
+        </div>
+      </div>
+
+      <figure class="phone">
+        <img src="screen-connect.webp" width="540" height="1200" alt="Centium's Connect screen, showing traffic going from the phone through a guard, middle and exit relay to the internet">
+      </figure>
+    </section>
+
+    <section class="wrap section">
+      <h2>How your traffic travels</h2>
+      <ol class="route">
+        <li><strong>This phone</strong><span>Your provider sees only that you use Tor</span></li>
+        <li><strong>Guard relay</strong><span>Knows your address, not where you go</span></li>
+        <li><strong>Middle relay</strong><span>Knows neither who you are nor where you go</span></li>
+        <li><strong>Exit relay</strong><span>Knows where you go, not who you are</span></li>
+        <li><strong>The internet</strong><span>Sites see a Tor exit, not you</span></li>
+      </ol>
+      <p class="note">Unlike a regular VPN, there's no company in the middle that sees everything. The relays are run by volunteers, and no single relay knows both who you are and where you go.</p>
+    </section>
+
+    <section class="wrap section">
+      <h2>What you get</h2>
+      <ul class="group">
+        <li><strong>Works for every app</strong><span>Not just a browser. No root needed.</span></li>
+        <li><strong>Your route at a glance</strong><span>See the relays you're using and the country websites see you in.</span></li>
+        <li><strong>Name lookups through Tor</strong><span>Resolved at the exit, never by your provider.</span></li>
+        <li><strong>Block traffic if Tor drops</strong><span>Apps stay offline instead of falling back to your real address.</span></li>
+        <li><strong>Choices when you need them</strong><span>Block IPv6, pick an exit country, or add your own bridge relays if Tor is blocked where you are.</span></li>
+        <li><strong>Built-in leak test</strong><span>Checks your live connection on demand.</span></li>
+        <li><strong>Updates itself</strong><span>New versions install over the old one, checked against the same signing key.</span></li>
+      </ul>
+    </section>
+
+    <section class="wrap section">
+      <h2>Good to know</h2>
+      <ul class="group">
+        <li><strong>Tor is slower</strong><span>Pages take longer to load, and some websites block Tor.</span></li>
+        <li><strong>No voice or video calls</strong><span>Apps that use UDP, like most calls and many games, won't work while connected. Tor carries TCP only.</span></li>
+        <li><strong>Bridges</strong><span>Plain bridge relays work. obfs4 and Snowflake aren't supported yet.</span></li>
+      </ul>
+    </section>
+
+    <section class="wrap section">
+      <h2>Install it</h2>
+      <ol class="steps">
+        <li>Tap <strong>Download for Android</strong> on your phone.</li>
+        <li>Open the file. If Android asks, allow your browser to install apps.</li>
+        <li>Open Centium and tap <strong>Connect</strong>. Android asks once to allow the VPN.</li>
+      </ol>
+      <p class="note">Already have Centium from F-Droid? That copy is signed by F-Droid, so it can't be updated with this download. Uninstall it first, or keep updating through F-Droid.</p>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Centium is free software under the GPL-3.0. This site doesn't use cookies or analytics. It only counts how many times the download button is pressed.</p>
+    <p>
+      <a href="https://github.com/Kolgrim33/centiumvpn">Source code</a>
+      <a href="https://github.com/Kolgrim33/centiumvpn/blob/HEAD/CHANGELOG.md">What's new</a>
+      <a href="https://github.com/Kolgrim33/centiumvpn/issues">Report a problem</a>
+    </p>
+  </footer>
+</body>
+</html>

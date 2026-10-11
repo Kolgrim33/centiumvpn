@@ -1,5 +1,7 @@
 # Centium VPN
 
+**Android app:** download it at https://centium.web.app.
+
 Centium VPN is a privacy-focused desktop VPN application that routes system Internet traffic through the **Tor network**.
 
 ## 1. Running Centium as a Native Desktop App (Not Just in a Browser)

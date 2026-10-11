@@ -94,6 +94,15 @@ The concept is a transit map of the Tor route. On the Connect screen, `ui/RouteL
 - **Lists:** use grouped rows (the `Centium.Group`, `Centium.Row` and `Centium.Divider` styles in `values/styles.xml`), not a separate card per item.
 - **Copy:** sentence case, no ALL-CAPS labels, plain language from the user's point of view ("Block traffic if Tor drops", not "Fail-Closed Kill Switch"). User-facing strings go in `values/strings.xml`.
 
+## Website (`website/`)
+
+- **What:** a static download page at https://centium.web.app, on Firebase Hosting (project `centium-app`, site `centium`, Spark plan). No build step: `website/public/` is served as is. The older `centium-vpn` Firebase project is unrelated and unused.
+- **Download link:** the page reads GitHub `releases/latest` and links the `centium-*.apk` asset and its SHA-256, so releases don't need a redeploy. Without JS the button opens the releases page.
+- **Counter:** each press sends one Firestore REST commit adding 1 to `stats/downloads.count`. `firestore.rules` allows only that: no reads, no other writes. The count isn't shown on the page.
+  - Read it with `cd website && npm run downloads` (uses the Firebase CLI login; also prints GitHub's APK download total).
+- **Commands (in `website/`):** `npm run test:rules` (rules tests on the emulator), `npm run serve` (local site + Firestore emulator on :5055/:8085; seed `stats/downloads` there with `Authorization: Bearer owner`), `npm run deploy`.
+- **Privacy:** no analytics, cookies or third-party scripts; fonts are self-hosted.
+
 ## Conventions
 
 - **Git:** work on a branch, then merge to `main`. The submodule is a gitlink, so commit submodule bumps deliberately.

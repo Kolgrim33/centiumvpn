@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/centium-icon.svg" alt="Centium logo" width="112">
+</p>
+
 # Centium VPN
 
 **Android app:** download it at https://centium.web.app.

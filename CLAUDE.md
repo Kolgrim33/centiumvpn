@@ -97,6 +97,10 @@ The concept is a transit map of the Tor route. On the Connect screen, `ui/RouteL
 - **Lists:** use grouped rows (the `Centium.Group`, `Centium.Row` and `Centium.Divider` styles in `values/styles.xml`), not a separate card per item.
 - **Copy:** sentence case, no ALL-CAPS labels, plain language from the user's point of view ("Block traffic if Tor drops", not "Fail-Closed Kill Switch"). User-facing strings go in `values/strings.xml`.
 
+## Logo
+
+`assets/logo/`: `centium-mark.svg` (the "C" mark in the route colour), `centium-icon.svg` and `centium-icon-512.png` (white mark on the purple tile, as on the launcher and Play listing). The README shows the icon.
+
 ## Website (`website/`)
 
 - **What:** a static download page at https://centium.web.app, on Firebase Hosting (project `centium-app`, site `centium`, Spark plan). No build step: `website/public/` is served as is.
@@ -109,4 +113,5 @@ The concept is a transit map of the Tor route. On the Connect screen, `ui/RouteL
 ## Conventions
 
 - **Git:** work on a branch, then merge to `main`. The submodule is a gitlink, so commit submodule bumps deliberately.
+- **Commit messages:** no `Co-Authored-By` trailers or other AI attribution; the owner doesn't want Claude listed as a contributor.
 - **`package-lock.json`:** it often carries unrelated npm churn. Don't commit it with Android work.

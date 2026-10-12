@@ -37,7 +37,7 @@ fun releaseSigning(): Map<String, String>? {
 
 android {
     namespace = "org.centium.vpn"
-    // tor-android 0.4.9.x declares minCompileSdk 37.1; targetSdk (runtime behavior) stays 34
+    // tor-android 0.4.9.x declares minCompileSdk 37.1. targetSdk 36 is Google Play's minimum since 31 Aug 2026.
     compileSdk {
         version = release(37) {
             minorApiLevel = 1
@@ -47,7 +47,7 @@ android {
     defaultConfig {
         applicationId = "org.centium.vpn"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = centiumVersionCode.also {
             require(it == versionCodeOf(centiumVersionName)) {
                 "centium.versionCode must be ${versionCodeOf(centiumVersionName)} for versionName $centiumVersionName"
@@ -107,7 +107,7 @@ android {
         }
     }
 
-    // github: self-updates from GitHub Releases. fdroid: F-Droid delivers updates,
+    // github: self-updates from GitHub Releases. fdroid and play: the store delivers updates,
     // so the updater is switched off and its permission/receivers are stripped.
     flavorDimensions += "distribution"
     productFlavors {
@@ -116,6 +116,10 @@ android {
             buildConfigField("boolean", "UPDATES_ENABLED", "true")
         }
         create("fdroid") {
+            dimension = "distribution"
+            buildConfigField("boolean", "UPDATES_ENABLED", "false")
+        }
+        create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "UPDATES_ENABLED", "false")
         }

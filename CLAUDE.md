@@ -37,7 +37,8 @@ Other notes:
   - Keep `--max-workers=2`. A full parallel build, which includes NDK builds for 4 ABIs, has OOM-killed this machine.
   - The SDK is at `~/Android/Sdk`, set in `android/local.properties` (gitignored).
   - If ndk-build reports a stale path, delete `android/app/.cxx` and `android/app/build/.cxx` and `android/app/build/intermediates/cxx`.
-- **Flavors:** `github` (self-updater on) and `fdroid` (updater off, and `src/fdroid/AndroidManifest.xml` strips `REQUEST_INSTALL_PACKAGES` and the update receivers). Build one with e.g. `assembleGithubDebug` or `assembleFdroidRelease`. A bare `assembleDebug` builds both.
+- **Flavors:** `github` (self-updater on), `fdroid` and `play` (updater off; `src/fdroid/` and `src/play/AndroidManifest.xml` strip `REQUEST_INSTALL_PACKAGES` and the update receivers, since stores deliver updates and Play forbids self-updating). Build one with e.g. `assembleGithubDebug` or `assembleFdroidRelease`; the Play upload is `bundlePlayRelease` (an `.aab`). A bare `assembleDebug` builds all three.
+- **targetSdk 36** (Play's minimum). The app draws edge to edge on every Android version: `MainActivity.fitSystemBars()` pads for the system bars and hides the bottom nav while the keyboard is open.
 - **Output:** `android/app/build/outputs/apk/<flavor>/<type>/`. Debug builds use the package `org.centium.vpn.debug` and release builds `org.centium.vpn`.
 
 ## Releasing and in-app updates

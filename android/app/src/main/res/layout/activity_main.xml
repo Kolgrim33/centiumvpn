@@ -38,6 +38,7 @@
         android:layout_weight="1" />
 
     <View
+        android:id="@+id/bottomNavDivider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/rule" />

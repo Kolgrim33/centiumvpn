@@ -1,0 +1,2 @@
+- Centium now targets Android 16, and its screens use the whole display on newer phones.
+- While you type bridge relays, the tab bar steps aside so the keyboard doesn't cover the field.

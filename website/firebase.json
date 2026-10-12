@@ -5,6 +5,7 @@
   "hosting": {
     "site": "centium",
     "public": "public",
+    "cleanUrls": true,
     "ignore": [
       "firebase.json",
       "**/.*",

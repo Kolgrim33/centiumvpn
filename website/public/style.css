@@ -104,3 +104,9 @@ h2 { font-weight: 800; font-size: 26px; line-height: 1.2; margin: 0 0 20px; }
   .phone { max-width: 260px; }
   .button { display: block; text-align: center; }
 }
+
+.policy h1 { font-size: clamp(32px, 5vw, 44px); }
+.policy .section p { margin: 0 0 16px; }
+.policy .group { margin-bottom: 16px; }
+.policy .section h2 + p, .policy p + h2 { margin-top: 0; }
+.policy p + h2 { padding-top: 16px; }

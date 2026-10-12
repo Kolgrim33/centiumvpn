@@ -3,6 +3,11 @@
 Each `## x.y.z` section becomes the GitHub release notes and the in-app
 "What's new" dialog. Write for users: what changed for them, in plain words.
 
+## 1.2.3
+- Apps that try a fast connection type Tor can't carry, like TikTok's comments, are now told straight away and switch to one that works, instead of hanging.
+- Centium now targets Android 16, and its screens use the whole display on newer phones.
+- While you type bridge relays, the tab bar steps aside so the keyboard doesn't cover the field.
+
 ## 1.2.1
 - Settings has a new About section with a link to Centium's website, centium.web.app, so you can share Centium with others.
 

@@ -19,7 +19,9 @@ class HevTunnelBridge(
         // Without an IPv6 address on the netif, lwIP drops IPv6 packets (block mode)
         val ipv6Line = if (config.blockIpv6) "" else "\n  ipv6: '${TunConfiguration.TUN_IPV6}'"
 
-        // Tor's SOCKS port has no UDP ASSOCIATE, so non-DNS UDP fails closed.
+        // Tor's SOCKS port has no UDP ASSOCIATE, so non-DNS UDP is refused with ICMP port
+        // unreachable ('reject', our hev patch): apps fall back from QUIC to TCP at once
+        // instead of waiting out a timeout, which made some app screens hang.
         // DNS is answered by mapdns with fake IPs; connections to those are sent
         // to Tor as SOCKS5 hostname requests, so lookups never leave via the ISP.
         val yaml = """
@@ -30,7 +32,7 @@ tunnel:
 socks5:
   port: $socksPort
   address: 127.0.0.1
-  udp: 'udp'
+  udp: 'reject'
 
 mapdns:
   address: ${TunConfiguration.MAPDNS_ADDRESS}

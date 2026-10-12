@@ -24,6 +24,8 @@ Connect flow (`vpn/CentiumVpnService.kt`):
 Other notes:
 - **UI state:** state flows live in the service's companion object, so the UI can observe them whether or not the service is running.
 - **Native bridge:** hev-socks5-tunnel is a git submodule pinned to 2.18.0. Its JNI registers natives on `hev.htproxy.TProxyService` (`java/hev/htproxy/TProxyService.kt`), so don't rename or move that class. After cloning, run `git submodule update --init --recursive`.
+  - **Patches:** the Gradle task `prepareHev` copies the submodule to `app/build/hev-socks5-tunnel/` and applies `src/main/jni/patches/*.patch`; ndk-build compiles that copy, so the submodule stays upstream. When bumping hev, check the patches still apply.
+  - **UDP:** `hev-udp-reject.patch` adds `udp: 'reject'`: non-DNS UDP gets ICMP port unreachable, because Tor can't carry UDP. Without it, apps using QUIC (e.g. TikTok) hang until a timeout before falling back to TCP.
 - **Bridges:** pluggable transports (obfs4, Snowflake) are not bundled. `TorrcGenerator` rejects them, and only plain `IP:port` bridges work.
 
 ## Building (Android)
@@ -37,7 +39,8 @@ Other notes:
   - Keep `--max-workers=2`. A full parallel build, which includes NDK builds for 4 ABIs, has OOM-killed this machine.
   - The SDK is at `~/Android/Sdk`, set in `android/local.properties` (gitignored).
   - If ndk-build reports a stale path, delete `android/app/.cxx` and `android/app/build/.cxx` and `android/app/build/intermediates/cxx`.
-- **Flavors:** `github` (self-updater on) and `fdroid` (updater off, and `src/fdroid/AndroidManifest.xml` strips `REQUEST_INSTALL_PACKAGES` and the update receivers). Build one with e.g. `assembleGithubDebug` or `assembleFdroidRelease`. A bare `assembleDebug` builds both.
+- **Flavors:** `github` (self-updater on), `fdroid` and `play` (updater off; `src/fdroid/` and `src/play/AndroidManifest.xml` strip `REQUEST_INSTALL_PACKAGES` and the update receivers, since stores deliver updates and Play forbids self-updating). Build one with e.g. `assembleGithubDebug` or `assembleFdroidRelease`; the Play upload is `bundlePlayRelease` (an `.aab`). A bare `assembleDebug` builds all three.
+- **targetSdk 36** (Play's minimum). The app draws edge to edge on every Android version: `MainActivity.fitSystemBars()` pads for the system bars and hides the bottom nav while the keyboard is open.
 - **Output:** `android/app/build/outputs/apk/<flavor>/<type>/`. Debug builds use the package `org.centium.vpn.debug` and release builds `org.centium.vpn`.
 
 ## Releasing and in-app updates

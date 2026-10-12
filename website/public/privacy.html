@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Centium privacy policy</title>
+  <meta name="description" content="Centium doesn't collect personal data. What the app and this website do, and which services they contact.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar wrap">
+    <a class="brand" href="/">
+      <span class="mark" aria-hidden="true"></span>
+      <span>Centium</span>
+    </a>
+    <a class="bar-link" href="https://github.com/Kolgrim33/centiumvpn">Source code</a>
+  </header>
+
+  <main class="policy">
+    <section class="wrap section">
+      <h1>Privacy policy</h1>
+      <p class="lede">Centium doesn't collect personal data. There are no accounts, ads, analytics or crash reports, and the people who make Centium never receive your traffic or anything about you.</p>
+      <p class="note">This policy covers the Centium app for Android, in every version (Google Play, F-Droid and the download from this site), and this website. Last updated 12 October 2026.</p>
+    </section>
+
+    <section class="wrap section">
+      <h2>Your traffic</h2>
+      <p>Centium uses Android's VPN permission for one thing: to send your phone's traffic through the Tor network. It doesn't read, store or change what you send.</p>
+      <ul class="group">
+        <li><strong>Through three relays</strong><span>Your traffic is encrypted and passes through three Tor relays run by volunteers. No single relay knows both who you are and where you go.</span></li>
+        <li><strong>What the exit relay sees</strong><span>The last relay sees which sites you connect to, but not who you are. If a site doesn't use encryption (plain http), that relay can also see what you send to it.</span></li>
+        <li><strong>Name lookups</strong><span>Site names are looked up at the exit relay, through Tor, not by your internet provider.</span></li>
+      </ul>
+    </section>
+
+    <section class="wrap section">
+      <h2>Services the app contacts</h2>
+      <ul class="group">
+        <li><strong>The Tor network</strong><span>To build your route, Centium downloads the public list of relays and connects to them, like any Tor client.</span></li>
+        <li><strong>check.torproject.org and onionoo.torproject.org</strong><span>Run by the Tor Project. Contacted through Tor to confirm your connection uses Tor and to show the country websites see you in. They see a Tor exit, not your address.</span></li>
+        <li><strong>GitHub, for updates</strong><span>Only the version downloaded from this site checks GitHub for new versions, through Tor once you're connected. The Google Play and F-Droid versions don't; their stores deliver updates.</span></li>
+      </ul>
+      <p class="note">Your phone's own apps keep sending whatever they normally send. Centium hides your address from them, but it can't stop an app from sharing what you tell it, such as a login.</p>
+    </section>
+
+    <section class="wrap section">
+      <h2>What stays on your phone</h2>
+      <ul class="group">
+        <li><strong>Your settings</strong><span>Such as your exit country or bridge relays. Stored only on your phone.</span></li>
+        <li><strong>The connection log</strong><span>Kept in memory while Centium runs, and gone when it closes. It never leaves your phone unless you copy it yourself.</span></li>
+        <li><strong>Tor's relay list</strong><span>A cached copy of the public relay list, so connecting is faster next time.</span></li>
+      </ul>
+      <p class="note">Uninstalling Centium removes all of this.</p>
+    </section>
+
+    <section class="wrap section">
+      <h2>This website</h2>
+      <ul class="group">
+        <li><strong>No cookies or analytics</strong><span>Fonts and images are served from this site; there are no third-party trackers.</span></li>
+        <li><strong>Download count</strong><span>Pressing Download adds one to a single counter. Nothing about you is stored with it.</span></li>
+        <li><strong>Hosting</strong><span>The site is hosted on Google's Firebase. Like any web host, its servers handle your address to deliver the page. To show the latest version, your browser asks GitHub about Centium's newest release.</span></li>
+      </ul>
+    </section>
+
+    <section class="wrap section">
+      <h2>Children</h2>
+      <p>Centium isn't directed at children and collects no data from anyone, including children.</p>
+
+      <h2>Changes and questions</h2>
+      <p>If this policy changes, the new version will appear on this page with a new date. Centium is open source, so you can check what it does in its <a href="https://github.com/Kolgrim33/centiumvpn">source code</a>. Questions are welcome on <a href="https://github.com/Kolgrim33/centiumvpn/issues">GitHub</a>.</p>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Centium is free software under the GPL-3.0.</p>
+    <p>
+      <a href="/">Home</a>
+      <a href="https://github.com/Kolgrim33/centiumvpn">Source code</a>
+      <a href="https://github.com/Kolgrim33/centiumvpn/issues">Report a problem</a>
+    </p>
+  </footer>
+</body>
+</html>

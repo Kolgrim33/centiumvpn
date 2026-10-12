@@ -1,0 +1,3 @@
+- Apps that try a fast connection type Tor can't carry, like TikTok's comments, are now told straight away and switch to one that works, instead of hanging.
+- Centium now targets Android 16, and its screens use the whole display on newer phones.
+- While you type bridge relays, the tab bar steps aside so the keyboard doesn't cover the field.

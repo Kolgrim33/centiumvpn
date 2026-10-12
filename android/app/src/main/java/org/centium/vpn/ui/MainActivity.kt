@@ -6,8 +6,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.centium.vpn.BuildConfig
@@ -30,6 +34,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        fitSystemBars()
 
         vpnManager = VpnLifecycleManager(this)
 
@@ -138,5 +143,23 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val VPN_PREPARE_REQUEST_CODE = 8421
         private const val NOTIFICATION_REQUEST_CODE = 8422
+    }
+
+    /**
+     * Android 15+ always draws apps edge to edge, so do it on every version and pad for the bars.
+     * The bottom nav pads itself for the navigation bar. While the keyboard is open the nav is
+     * hidden (it would otherwise add the keyboard's height again) and the content sits above it.
+     */
+    private fun fitSystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { root, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val keyboardOpen = insets.isVisible(WindowInsetsCompat.Type.ime())
+            val bottom = if (keyboardOpen) insets.getInsets(WindowInsetsCompat.Type.ime()).bottom else 0
+            root.setPadding(bars.left, bars.top, bars.right, bottom)
+            binding.bottomNav.visibility = if (keyboardOpen) View.GONE else View.VISIBLE
+            binding.bottomNavDivider.visibility = binding.bottomNav.visibility
+            insets
+        }
     }
 }

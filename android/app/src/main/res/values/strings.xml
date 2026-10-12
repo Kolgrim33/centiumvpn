@@ -84,6 +84,14 @@
     <string name="logs_copied">Logs copied</string>
     <string name="logs_empty">Nothing yet. Logs appear here once you connect.</string>
 
+    <!-- About -->
+    <string name="settings_group_about">About</string>
+    <string name="settings_website">Website</string>
+    <string name="settings_website_summary">centium.web.app. Share it so others can download Centium.</string>
+    <string name="settings_website_open">Open</string>
+    <string name="website_url" translatable="false">https://centium.web.app</string>
+    <string name="settings_no_browser">No browser found to open the link</string>
+
     <!-- Updates -->
     <string name="settings_group_updates">Updates</string>
     <string name="settings_auto_update">Check for updates automatically</string>

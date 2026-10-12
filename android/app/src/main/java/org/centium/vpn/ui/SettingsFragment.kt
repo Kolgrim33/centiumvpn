@@ -2,6 +2,7 @@ package org.centium.vpn.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
@@ -70,6 +71,14 @@ class SettingsFragment : Fragment() {
                 startActivity(Intent(Settings.ACTION_VPN_SETTINGS))
             } catch (_: ActivityNotFoundException) {
                 startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
+            }
+        }
+
+        binding.btnOpenWebsite.setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.website_url))))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(requireContext(), R.string.settings_no_browser, Toast.LENGTH_SHORT).show()
             }
         }
 

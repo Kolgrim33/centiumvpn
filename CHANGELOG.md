@@ -3,6 +3,9 @@
 Each `## x.y.z` section becomes the GitHub release notes and the in-app
 "What's new" dialog. Write for users: what changed for them, in plain words.
 
+## 1.2.1
+- Settings has a new About section with a link to Centium's website, centium.web.app, so you can share Centium with others.
+
 ## 1.2.0
 - Centium is now free software under the GPL-3.0 license, and coming to F-Droid.
 - The exit country now comes from the Tor Project's own relay directory, through Tor, instead of a third-party lookup service.

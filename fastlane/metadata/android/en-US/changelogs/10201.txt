@@ -1,0 +1,1 @@
+- Settings has a new About section with a link to Centium's website, centium.web.app, so you can share Centium with others.

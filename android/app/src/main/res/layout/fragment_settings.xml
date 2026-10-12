@@ -224,6 +224,28 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- About -->
+        <TextView
+            style="@style/Centium.SectionLabel"
+            android:text="@string/settings_group_about" />
+
+        <LinearLayout style="@style/Centium.Group">
+
+            <LinearLayout style="@style/Centium.Row">
+                <LinearLayout style="@style/Centium.RowText">
+                    <TextView style="@style/Centium.RowTitle" android:text="@string/settings_website" />
+                    <TextView style="@style/Centium.RowSummary" android:text="@string/settings_website_summary" />
+                </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOpenWebsite"
+                    style="@style/Widget.Centium.Button.Text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:text="@string/settings_website_open" />
+            </LinearLayout>
+        </LinearLayout>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSaveSettings"
             style="@style/Widget.Centium.Button.Primary"

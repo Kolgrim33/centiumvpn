@@ -35,6 +35,36 @@ fun releaseSigning(): Map<String, String>? {
     return props.stringPropertyNames().associateWith { props.getProperty(it) }
 }
 
+/**
+ * hev-socks5-tunnel is built from a copy of the submodule with our patches applied, so the
+ * submodule stays pristine upstream. hev-udp-reject.patch adds `udp: 'reject'`, which answers
+ * UDP with ICMP port unreachable (Tor can't carry UDP), so apps drop QUIC for TCP immediately.
+ */
+val hevPatchedDir = layout.buildDirectory.dir("hev-socks5-tunnel")
+val hevPatches = file("src/main/jni/patches")
+val prepareHev by tasks.registering(Sync::class) {
+    from("src/main/jni/hev-socks5-tunnel") { exclude("**/.git", "**/.git/**") }
+    into(hevPatchedDir)
+    inputs.dir(hevPatches)
+    val patches = hevPatches.listFiles { f -> f.extension == "patch" }!!.sorted()
+    val target = hevPatchedDir
+    doLast {
+        patches.forEach { patch ->
+            // The copy sits inside this repo, where `git apply` would silently skip its files;
+            // the ceiling makes git treat it as a plain directory, like `patch`.
+            val dir = target.get().asFile
+            val proc = ProcessBuilder("git", "apply", "--verbose", patch.absolutePath)
+                .directory(dir).redirectErrorStream(true)
+                .apply { environment()["GIT_CEILING_DIRECTORIES"] = dir.parentFile.absolutePath }
+                .start()
+            val out = proc.inputStream.bufferedReader().readText()
+            check(proc.waitFor() == 0 && "Applied patch" in out) { "Applying ${patch.name} failed: $out" }
+        }
+    }
+}
+tasks.matching { it.name.startsWith("configureNdkBuild") || it.name.startsWith("buildNdkBuild") }
+    .configureEach { dependsOn(prepareHev) }
+
 android {
     namespace = "org.centium.vpn"
     // tor-android 0.4.9.x declares minCompileSdk 37.1. targetSdk 36 is Google Play's minimum since 31 Aug 2026.
@@ -65,6 +95,8 @@ android {
             ndkBuild {
                 // Only the JNI library; upstream also defines a standalone binary
                 targets("hev-socks5-tunnel")
+                // Build from the patched copy (see prepareHev below), not the submodule itself
+                arguments("HEV_SRC=${hevPatchedDir.get().asFile.absolutePath}", "REV_ID=2.18.0-centium")
             }
         }
     }

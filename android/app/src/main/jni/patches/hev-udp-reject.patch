@@ -1,0 +1,127 @@
+diff --git a/src/hev-config.c b/src/hev-config.c
+index 09baa2f..031fcdf 100644
+--- a/src/hev-config.c
++++ b/src/hev-config.c
+@@ -253,6 +253,8 @@ hev_config_parse_socks5 (yaml_document_t *doc, yaml_node_t *base)
+ 
+     if (udpm && (strcasecmp (udpm, "udp") == 0))
+         srv.udp_in_udp = 1;
++    else if (udpm && (strcasecmp (udpm, "reject") == 0))
++        srv.udp_reject = 1;
+ 
+     if (udpa)
+         strncpy (srv.udp_addr, udpa, 256 - 1);
+diff --git a/src/hev-config.h b/src/hev-config.h
+index bec40a3..26982ce 100644
+--- a/src/hev-config.h
++++ b/src/hev-config.h
+@@ -18,6 +18,7 @@ struct _HevConfigServer
+     const char *pass;
+     unsigned int mark;
+     short udp_in_udp;
++    short udp_reject;
+     unsigned short port;
+     unsigned char pipeline;
+     unsigned char fastopen;
+diff --git a/src/hev-socks5-tunnel.c b/src/hev-socks5-tunnel.c
+index 28bfe78..e2d4b90 100644
+--- a/src/hev-socks5-tunnel.c
++++ b/src/hev-socks5-tunnel.c
+@@ -16,6 +16,10 @@
+ 
+ #include <lwip/tcp.h>
+ #include <lwip/udp.h>
++#include <lwip/ip.h>
++#include <lwip/inet_chksum.h>
++#include <lwip/icmp.h>
++#include <lwip/prot/icmp6.h>
+ #include <lwip/nd6.h>
+ #include <lwip/netif.h>
+ #include <lwip/ip4_frag.h>
+@@ -234,6 +238,74 @@ exit:
+     udp_remove (pcb);
+ }
+ 
++/*
++ * udp: 'reject' (for SOCKS servers without UDP ASSOCIATE, such as Tor). Answer
++ * each datagram with ICMP port unreachable so apps fail over to TCP at once
++ * instead of waiting out a timeout (e.g. QUIC). The reply's source is the
++ * original destination, not the netif's loopback address, which the OS would
++ * drop as a martian.
++ */
++static void
++udp_reject_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
++                    const ip_addr_t *addr, u16_t port)
++{
++    u16_t hlen = ip_current_header_tot_len () + UDP_HLEN;
++    struct pbuf *q;
++    u16_t qlen;
++
++    if (pbuf_header_force (p, (s16_t)hlen))
++        goto exit;
++
++    if (ip_current_is_v6 ()) {
++        struct icmp6_hdr *icmp;
++        ip6_addr_t src, dst;
++
++        /* RFC 4443: quote as much as fits in the minimum IPv6 MTU */
++        qlen = LWIP_MIN (p->tot_len, 1280 - IP6_HLEN - sizeof (*icmp));
++        q = pbuf_alloc (PBUF_IP, sizeof (*icmp) + qlen, PBUF_RAM);
++        if (!q)
++            goto exit;
++        icmp = q->payload;
++        icmp->type = ICMP6_TYPE_DUR;
++        icmp->code = ICMP6_DUR_PORT;
++        icmp->chksum = 0;
++        icmp->data = 0;
++        pbuf_copy_partial (p, (u8_t *)q->payload + sizeof (*icmp), qlen, 0);
++        ip6_addr_copy (src, *ip6_current_dest_addr ());
++        ip6_addr_copy (dst, *ip6_current_src_addr ());
++        icmp->chksum = ip6_chksum_pseudo (q, IP6_NEXTH_ICMP6, q->tot_len,
++                                          &src, &dst);
++        ip6_output_if (q, &src, &dst, IP_DEFAULT_TTL, 0, IP6_NEXTH_ICMP6,
++                       netif);
++    } else {
++        struct icmp_echo_hdr *icmp;
++        ip4_addr_t src, dst;
++
++        /* RFC 792: the IP header plus the first 8 bytes of its payload */
++        qlen = LWIP_MIN (p->tot_len, ip_current_header_tot_len () + 8);
++        q = pbuf_alloc (PBUF_IP, sizeof (*icmp) + qlen, PBUF_RAM);
++        if (!q)
++            goto exit;
++        icmp = q->payload;
++        ICMPH_TYPE_SET (icmp, ICMP_DUR);
++        ICMPH_CODE_SET (icmp, ICMP_DUR_PORT);
++        icmp->chksum = 0;
++        icmp->id = 0;
++        icmp->seqno = 0;
++        pbuf_copy_partial (p, (u8_t *)q->payload + sizeof (*icmp), qlen, 0);
++        icmp->chksum = inet_chksum (q->payload, q->len);
++        ip4_addr_copy (src, *ip4_current_dest_addr ());
++        ip4_addr_copy (dst, *ip4_current_src_addr ());
++        ip4_output_if (q, &src, &dst, IP_DEFAULT_TTL, 0, IP_PROTO_ICMP, netif);
++    }
++    pbuf_free (q);
++
++exit:
++    pbuf_free (p);
++    udp_recv (pcb, NULL, NULL);
++    udp_remove (pcb);
++}
++
+ static void
+ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
+                   const ip_addr_t *addr, u16_t port)
+@@ -259,6 +331,11 @@ udp_recv_handler (void *arg, struct udp_pcb *pcb, struct pbuf *p,
+         }
+     }
+ 
++    if (hev_config_get_socks5_server ()->udp_reject) {
++        udp_recv (pcb, udp_reject_handler, NULL);
++        return;
++    }
++
+     udp = hev_socks5_session_udp_new (pcb, &mutex);
+     if (!udp) {
+         udp_remove (pcb);

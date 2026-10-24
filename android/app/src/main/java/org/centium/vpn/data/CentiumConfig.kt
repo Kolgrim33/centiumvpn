@@ -9,6 +9,7 @@ data class CentiumConfig(
     var blockIpv6: Boolean = true,
     var autoConnect: Boolean = false,
     var dnsProtection: Boolean = true,
+    var adBlockEnabled: Boolean = false,
     var connectionTimeoutSeconds: Int = 120,
     var disallowPackages: Set<String> = emptySet()
 )

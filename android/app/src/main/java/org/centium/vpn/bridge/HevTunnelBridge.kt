@@ -3,7 +3,9 @@ package org.centium.vpn.bridge
 import android.content.Context
 import hev.htproxy.TProxyService
 import java.io.File
+import org.centium.vpn.blocklist.BlocklistManager
 import org.centium.vpn.data.CentiumConfig
+import org.centium.vpn.data.PreferencesRepository
 import org.centium.vpn.vpn.TunConfiguration
 
 class HevTunnelBridge(
@@ -18,6 +20,13 @@ class HevTunnelBridge(
 
         // Without an IPv6 address on the netif, lwIP drops IPv6 packets (block mode)
         val ipv6Line = if (config.blockIpv6) "" else "\n  ipv6: '${TunConfiguration.TUN_IPV6}'"
+
+        // Optional ad/tracker blocking: mapdns returns NXDOMAIN for listed domains. The list is
+        // composed per flavor and user allowlist; absent or disabled, this line is empty.
+        val prefs = PreferencesRepository(context)
+        val blocklistFile = BlocklistManager(context, prefs).activeListFile(config)
+        val blocklistLine = blocklistFile?.let { "\n  blocklist: '${it.absolutePath}'" } ?: ""
+        if (blocklistFile != null) onLog("[Bridge] Ad/tracker blocking on (${blocklistFile.name}).")
 
         // Tor's SOCKS port has no UDP ASSOCIATE, so non-DNS UDP is refused with ICMP port
         // unreachable ('reject', our hev patch): apps fall back from QUIC to TCP at once
@@ -39,7 +48,7 @@ mapdns:
   port: 53
   network: 100.64.0.0
   netmask: 255.192.0.0
-  cache-size: 10000
+  cache-size: 10000$blocklistLine
 
 misc:
   task-stack-size: 81920

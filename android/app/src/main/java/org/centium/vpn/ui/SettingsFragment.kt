@@ -51,6 +51,8 @@ class SettingsFragment : Fragment() {
         binding.switchKillSwitch.isChecked = currentConfig.killSwitch
         binding.switchBlockIpv6.isChecked = currentConfig.blockIpv6
 
+        setUpAdBlock(currentConfig.adBlockEnabled, prefsRepo)
+
         setUpExitCountry(currentConfig.exitLocation)
 
         binding.etCustomBridges.setText(currentConfig.customBridges)
@@ -95,11 +97,13 @@ class SettingsFragment : Fragment() {
             val updated = currentConfig.copy(
                 killSwitch = binding.switchKillSwitch.isChecked,
                 blockIpv6 = binding.switchBlockIpv6.isChecked,
+                adBlockEnabled = binding.switchAdBlock.isChecked,
                 exitLocation = selectedExitCode(),
                 bridgeMode = mode,
                 bridgeType = type,
                 customBridges = customBridges
             )
+            prefsRepo.adBlockAllowlist = binding.etAdBlockAllowlist.text.toString()
             prefsRepo.saveConfig(updated)
             Toast.makeText(requireContext(), R.string.settings_saved, Toast.LENGTH_SHORT).show()
         }
@@ -122,6 +126,25 @@ class SettingsFragment : Fragment() {
         R.id.rbBridgeObfs4 -> BridgeMode.BUILTIN to BridgeType.OBFS4
         R.id.rbBridgeCustom -> BridgeMode.CUSTOM to BridgeType.NONE
         else -> BridgeMode.AUTO to BridgeType.NONE
+    }
+
+    private fun setUpAdBlock(enabled: Boolean, prefsRepo: org.centium.vpn.data.PreferencesRepository) {
+        binding.switchAdBlock.isChecked = enabled
+        binding.etAdBlockAllowlist.setText(prefsRepo.adBlockAllowlist)
+        binding.groupAdBlockAllowlist.visibility = if (enabled) View.VISIBLE else View.GONE
+        binding.switchAdBlock.setOnCheckedChangeListener { _, checked ->
+            binding.groupAdBlockAllowlist.visibility = if (checked) View.VISIBLE else View.GONE
+        }
+
+        val updatedAt = prefsRepo.blocklistUpdatedAt
+        binding.tvBlocklistUpdated.text = if (updatedAt == 0L) {
+            getString(R.string.settings_adblock_updated_never)
+        } else {
+            getString(
+                R.string.settings_adblock_updated,
+                java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(updatedAt))
+            )
+        }
     }
 
     private fun setUpUpdates() {

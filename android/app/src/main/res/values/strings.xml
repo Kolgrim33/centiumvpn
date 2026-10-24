@@ -58,6 +58,14 @@
     <string name="settings_always_on">Always-on VPN</string>
     <string name="settings_always_on_summary">For the strongest protection, make Centium always-on and turn on Block connections without VPN in Android settings.</string>
     <string name="settings_open">Open</string>
+    <string name="settings_group_blocking">Blocking</string>
+    <string name="settings_adblock">Block trackers &amp; ads</string>
+    <string name="settings_adblock_summary">Refuse ad and tracking domains across your apps, so pages load lighter and trackers can\'t reach you. It won\'t remove YouTube or in-app ads, and some sites may need adjusting.</string>
+    <string name="settings_adblock_allowlist_label">Always allow these domains (one per line)</string>
+    <string name="settings_adblock_allowlist_hint">example.com</string>
+    <string name="settings_adblock_updated">List updated: %1$s. Changes apply next time you connect.</string>
+    <string name="settings_adblock_updated_never">The list refreshes over Tor after you connect. Changes apply next time you connect.</string>
+
     <string name="settings_group_exit">Exit country</string>
     <string name="settings_exit_summary">Choosing a country can make connections slower and your traffic easier to single out.</string>
     <string name="settings_exit_any">Any country</string>

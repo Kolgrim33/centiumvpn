@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Play-flavor wording. The Play build blocks only malware and tracker domains, not ad networks
+  (ADS_BLOCKING_ALLOWED is false), and avoids "ad blocker" language, which can breach Play policy.
+-->
+<resources>
+    <string name="settings_adblock">Malware &amp; tracker protection</string>
+    <string name="settings_adblock_summary">Block known malware and tracking domains across your apps, for more privacy and lighter pages. Some sites may need adjusting.</string>
+</resources>

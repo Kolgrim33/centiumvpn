@@ -37,7 +37,11 @@ fun releaseSigning(): Map<String, String>? {
 
 /**
  * hev-socks5-tunnel is built from a copy of the submodule with our patches applied, so the
- * submodule stays pristine upstream. hev-udp-reject.patch adds `udp: 'reject'`, which answers
+ * submodule stays pristine upstream. Patches apply in filename order:
+ *   hev-udp-reject.patch      adds `udp: 'reject'` (see below)
+ *   hev-zz-dns-blocklist.patch adds a `mapdns.blocklist` file whose domains (and their
+ *                             subdomains) get NXDOMAIN, for ad/tracker blocking.
+ * hev-udp-reject.patch adds `udp: 'reject'`, which answers
  * UDP with ICMP port unreachable (Tor can't carry UDP), so apps drop QUIC for TCP immediately.
  */
 val hevPatchedDir = layout.buildDirectory.dir("hev-socks5-tunnel")
@@ -145,19 +149,25 @@ android {
     val allAbis = armAbis + setOf("x86_64", "x86")
     flavorDimensions += "distribution"
     productFlavors {
+        // ADS_BLOCKING_ALLOWED gates the ad-network list. It's off for Play, where blocking ads
+        // in other apps risks removal; Play keeps only the tracker/malware list. F-Droid and
+        // GitHub face no such policy, so they can block ad networks too.
         create("github") {
             dimension = "distribution"
             buildConfigField("boolean", "UPDATES_ENABLED", "true")
+            buildConfigField("boolean", "ADS_BLOCKING_ALLOWED", "true")
             ndk { abiFilters.addAll(armAbis) }
         }
         create("fdroid") {
             dimension = "distribution"
             buildConfigField("boolean", "UPDATES_ENABLED", "false")
+            buildConfigField("boolean", "ADS_BLOCKING_ALLOWED", "true")
             ndk { abiFilters.addAll(armAbis) }
         }
         create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "UPDATES_ENABLED", "false")
+            buildConfigField("boolean", "ADS_BLOCKING_ALLOWED", "false")
             ndk { abiFilters.addAll(allAbis) }
         }
     }

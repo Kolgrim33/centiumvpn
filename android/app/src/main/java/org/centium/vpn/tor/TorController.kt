@@ -47,6 +47,12 @@ class TorController(
         }
     }
 
+    /**
+     * The port Tor's SOCKS listener is bound to. Tor opens it only once DisableNetwork is off,
+     * after TorService has already looked for it, so ask Tor directly.
+     */
+    suspend fun getSocksPort(): Int? = getInfo("net/listeners/socks")?.let { parseSocksPort(it) }
+
     /** Parses e.g. `NOTICE BOOTSTRAP PROGRESS=75 TAG=enough_dirinfo SUMMARY="Loaded enough directory info"`. */
     suspend fun getBootstrapPhase(): BootstrapPhase? {
         val info = getInfo("status/bootstrap-phase") ?: return null
@@ -83,5 +89,11 @@ class TorController(
             }
             CircuitNode(role = role, fingerprint = fp, nickname = nick)
         }
+    }
+
+    companion object {
+        /** Parses GETINFO net/listeners/socks, e.g. `"127.0.0.1:41235"`; the first TCP listener wins. */
+        fun parseSocksPort(info: String): Int? =
+            Regex("""(?:^|[\s"])[\d.]+:(\d+)""").find(info)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it > 0 }
     }
 }

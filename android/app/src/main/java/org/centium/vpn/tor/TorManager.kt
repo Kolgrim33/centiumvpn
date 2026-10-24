@@ -133,7 +133,7 @@ class TorManager(
             when (val verdict = watch.verdict(phase?.percent ?: 0, now - started)) {
                 BootstrapWatch.Verdict.WAIT -> {}
                 BootstrapWatch.Verdict.DONE -> {
-                    socksPort = service.socksPort
+                    socksPort = controller.getSocksPort() ?: service.socksPort
                     if (socksPort > 0) {
                         onLog("[Tor] SOCKS5 listening on 127.0.0.1:$socksPort")
                         return verdict

@@ -10,7 +10,8 @@ object BridgeLines {
 
     /**
      * Returns one cleaned line per bridge, or throws [IllegalArgumentException] with a message
-     * the user can act on.
+     * the user can act on. Settings shows it in a toast, which Samsung cuts at two lines, so
+     * keep messages short.
      */
     fun parse(raw: String): List<String> {
         val lines = raw.lines()
@@ -23,13 +24,13 @@ object BridgeLines {
             val transport = transportOf(line)
             if (transport != null) {
                 require(transport in SUPPORTED_TRANSPORTS) {
-                    "Centium can't use $transport bridges. Use obfs4, Snowflake, WebTunnel or plain IP:port bridges."
+                    "Centium can't use $transport bridges. Try obfs4, Snowflake or WebTunnel."
                 }
                 require(parts.size >= 2 && ADDRESS.matches(parts[1])) {
-                    "This $transport bridge is missing its IP:port: $line"
+                    "A $transport bridge is missing its IP:port. Check for typos."
                 }
             } else {
-                require(ADDRESS.matches(parts[0])) { "This doesn't look like a bridge line: $line" }
+                require(ADDRESS.matches(parts[0])) { "One line isn't a bridge. Check it starts with IP:port or a transport." }
             }
         }
         return lines

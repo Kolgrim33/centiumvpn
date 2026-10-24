@@ -32,10 +32,11 @@ class TransportManager(
     fun ensureRunning(names: Set<String>): Map<String, Int> = synchronized(lock) {
         val controller = controller
         names.associateWith { name ->
-            if (name !in running) {
+            // IPtProxy's port is 0 exactly when the transport has no listener, i.e. isn't running
+            if (controller.port(name) <= 0) {
                 onLog("[Transport] Starting $name...")
+                lastErrors.remove(name)
                 controller.start(name, "")
-                running.add(name)
             }
             val port = controller.port(name).toInt()
             check(port > 0) { "The $name transport didn't open a local port" }
@@ -46,40 +47,41 @@ class TransportManager(
     /** Stops every running transport not in [keep]. */
     fun stopOthers(keep: Set<String> = emptySet()) {
         synchronized(lock) {
-            val stale = running - keep
-            if (stale.isEmpty()) return
-            val controller = controller
-            stale.forEach { name ->
+            val controller = shared ?: return
+            (BridgeLines.SUPPORTED_TRANSPORTS - keep).filter { controller.port(it) > 0 }.forEach { name ->
                 try {
                     controller.stop(name)
                 } catch (e: Exception) {
                     onLog("[Transport] Stopping $name failed: ${e.message}")
                 }
-                running.remove(name)
             }
         }
     }
 
     // Process-wide, because the VPN service can be recreated while the process lives on
     private companion object Events : OnTransportEvents {
-        // Guards start/stop sequences. The Go callbacks below never take it, so a callback
-        // fired while stop() holds it can't deadlock.
+        // Guards Controller calls. The Go callbacks below never take it, so a callback fired
+        // while stop() holds it can't deadlock.
         private val lock = Any()
-        private val running: MutableSet<String> = ConcurrentHashMap.newKeySet()
         private var shared: Controller? = null
+
+        // Last error logged per transport, so a bridge that keeps failing is logged once
+        private val lastErrors = ConcurrentHashMap<String, String>()
 
         @Volatile
         private var logSink: (String) -> Unit = {}
 
         override fun connected(name: String?) {}
 
-        override fun error(name: String?, error: Exception?) {
-            logSink("[Transport] $name: ${error?.message}")
-        }
+        override fun error(name: String?, error: Exception?) = report(name, error)
 
-        override fun stopped(name: String?, error: Exception?) {
-            running.remove(name)
-            if (error != null) logSink("[Transport] $name stopped: ${error.message}")
+        // Despite the name, IPtProxy calls this whenever one connection through the transport
+        // ends; the transport itself keeps listening until Controller.stop.
+        override fun stopped(name: String?, error: Exception?) = report(name, error)
+
+        private fun report(name: String?, error: Exception?) {
+            val message = error?.message ?: return
+            if (lastErrors.put(name ?: "", message) != message) logSink("[Transport] $name: $message")
         }
     }
 }

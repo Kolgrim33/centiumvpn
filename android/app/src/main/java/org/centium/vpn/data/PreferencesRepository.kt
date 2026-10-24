@@ -2,10 +2,31 @@ package org.centium.vpn.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.centium.vpn.tor.Route
 
 class PreferencesRepository(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    init {
+        migrate()
+    }
+
+    /** The route that last connected in Automatic mode, tried first next time. */
+    var lastWorkingRoute: Route?
+        get() = Route.entries.firstOrNull { it.name == prefs.getString(KEY_LAST_ROUTE, null) }
+        set(value) = prefs.edit().putString(KEY_LAST_ROUTE, value?.name).apply()
+
+    // Before 1.3.0, saving Settings stored "Connect directly" (NONE) because it was the only
+    // non-custom choice. Automatic still tries direct first, so move those users onto it once.
+    private fun migrate() {
+        if (prefs.getInt(KEY_SCHEMA, 1) >= 2) return
+        val edit = prefs.edit()
+        if (prefs.getString(KEY_BRIDGE_MODE, null) == BridgeMode.NONE.name) {
+            edit.putString(KEY_BRIDGE_MODE, BridgeMode.AUTO.name).putString(KEY_BRIDGE_TYPE, BridgeType.NONE.name)
+        }
+        edit.putInt(KEY_SCHEMA, 2).apply()
+    }
 
     fun getConfig(): CentiumConfig {
         return CentiumConfig(
@@ -49,5 +70,7 @@ class PreferencesRepository(context: Context) {
         private const val KEY_DNS_PROTECTION = "dns_protection"
         private const val KEY_TIMEOUT = "connection_timeout"
         private const val KEY_DISALLOWED_PKGS = "disallowed_packages"
+        private const val KEY_LAST_ROUTE = "last_working_route"
+        private const val KEY_SCHEMA = "prefs_schema"
     }
 }

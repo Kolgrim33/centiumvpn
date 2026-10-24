@@ -21,6 +21,7 @@ import org.centium.vpn.data.BridgeMode
 import org.centium.vpn.data.BridgeType
 import org.centium.vpn.data.ConnectionState
 import org.centium.vpn.databinding.FragmentSettingsBinding
+import org.centium.vpn.tor.BridgeLines
 import org.centium.vpn.update.UpdateManager
 import org.centium.vpn.vpn.CentiumVpnService
 
@@ -52,14 +53,10 @@ class SettingsFragment : Fragment() {
 
         setUpExitCountry(currentConfig.exitLocation)
 
-        // Built-in (Snowflake) bridges aren't bundled, so an old BUILTIN choice falls back to direct
-        if (currentConfig.bridgeMode == BridgeMode.CUSTOM) {
-            binding.rbBridgeCustom.isChecked = true
-            binding.groupCustomBridges.visibility = View.VISIBLE
-            binding.etCustomBridges.setText(currentConfig.customBridges)
-        } else {
-            binding.rbBridgeNone.isChecked = true
-        }
+        binding.etCustomBridges.setText(currentConfig.customBridges)
+        binding.rgBridgeMode.check(bridgeButtonFor(currentConfig.bridgeMode, currentConfig.bridgeType))
+        binding.groupCustomBridges.visibility =
+            if (binding.rbBridgeCustom.isChecked) View.VISIBLE else View.GONE
 
         binding.rgBridgeMode.setOnCheckedChangeListener { _, checkedId ->
             binding.groupCustomBridges.visibility =
@@ -85,18 +82,46 @@ class SettingsFragment : Fragment() {
         setUpUpdates()
 
         binding.btnSaveSettings.setOnClickListener {
-            val custom = binding.rbBridgeCustom.isChecked
+            val (mode, type) = selectedBridgeChoice()
+            val customBridges = binding.etCustomBridges.text.toString().trim()
+            if (mode == BridgeMode.CUSTOM) {
+                try {
+                    BridgeLines.parse(customBridges)
+                } catch (e: IllegalArgumentException) {
+                    Toast.makeText(requireContext(), e.message, Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+            }
             val updated = currentConfig.copy(
                 killSwitch = binding.switchKillSwitch.isChecked,
                 blockIpv6 = binding.switchBlockIpv6.isChecked,
                 exitLocation = selectedExitCode(),
-                bridgeMode = if (custom) BridgeMode.CUSTOM else BridgeMode.NONE,
-                bridgeType = if (custom) BridgeType.OBFS4 else BridgeType.NONE,
-                customBridges = binding.etCustomBridges.text.toString().trim()
+                bridgeMode = mode,
+                bridgeType = type,
+                customBridges = customBridges
             )
             prefsRepo.saveConfig(updated)
             Toast.makeText(requireContext(), R.string.settings_saved, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun bridgeButtonFor(mode: BridgeMode, type: BridgeType): Int = when (mode) {
+        BridgeMode.NONE -> R.id.rbBridgeNone
+        BridgeMode.CUSTOM -> R.id.rbBridgeCustom
+        BridgeMode.BUILTIN -> when (type) {
+            BridgeType.SNOWFLAKE -> R.id.rbBridgeSnowflake
+            BridgeType.OBFS4 -> R.id.rbBridgeObfs4
+            else -> R.id.rbBridgeAuto
+        }
+        BridgeMode.AUTO -> R.id.rbBridgeAuto
+    }
+
+    private fun selectedBridgeChoice(): Pair<BridgeMode, BridgeType> = when (binding.rgBridgeMode.checkedRadioButtonId) {
+        R.id.rbBridgeNone -> BridgeMode.NONE to BridgeType.NONE
+        R.id.rbBridgeSnowflake -> BridgeMode.BUILTIN to BridgeType.SNOWFLAKE
+        R.id.rbBridgeObfs4 -> BridgeMode.BUILTIN to BridgeType.OBFS4
+        R.id.rbBridgeCustom -> BridgeMode.CUSTOM to BridgeType.NONE
+        else -> BridgeMode.AUTO to BridgeType.NONE
     }
 
     private fun setUpUpdates() {

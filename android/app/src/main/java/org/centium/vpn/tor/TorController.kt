@@ -20,6 +20,23 @@ class TorController(
         }
     }
 
+    /**
+     * Applies SETCONF entries, each "Key value", in one command so Tor validates them together.
+     * Throws with Tor's reason if it refuses them. jtorctl crashes on an entry without a value,
+     * so use [resetConf] to clear settings.
+     */
+    suspend fun setConf(entries: List<String>) = withContext(Dispatchers.IO) {
+        require(entries.all { ' ' in it }) { "Every SETCONF entry needs a value: $entries" }
+        val conn = connection() ?: throw IllegalStateException("Tor's control connection is closed")
+        conn.setConf(entries)
+    }
+
+    /** Resets settings to Tor's defaults (RESETCONF). Throws if Tor refuses. */
+    suspend fun resetConf(keys: List<String>) = withContext(Dispatchers.IO) {
+        val conn = connection() ?: throw IllegalStateException("Tor's control connection is closed")
+        conn.resetConf(keys)
+    }
+
     suspend fun signalNewnym(): Boolean = withContext(Dispatchers.IO) {
         try {
             val conn = connection() ?: return@withContext false
@@ -29,6 +46,12 @@ class TorController(
             false
         }
     }
+
+    /**
+     * The port Tor's SOCKS listener is bound to. Tor opens it only once DisableNetwork is off,
+     * after TorService has already looked for it, so ask Tor directly.
+     */
+    suspend fun getSocksPort(): Int? = getInfo("net/listeners/socks")?.let { parseSocksPort(it) }
 
     /** Parses e.g. `NOTICE BOOTSTRAP PROGRESS=75 TAG=enough_dirinfo SUMMARY="Loaded enough directory info"`. */
     suspend fun getBootstrapPhase(): BootstrapPhase? {
@@ -66,5 +89,11 @@ class TorController(
             }
             CircuitNode(role = role, fingerprint = fp, nickname = nick)
         }
+    }
+
+    companion object {
+        /** Parses GETINFO net/listeners/socks, e.g. `"127.0.0.1:41235"`; the first TCP listener wins. */
+        fun parseSocksPort(info: String): Int? =
+            Regex("""(?:^|[\s"])[\d.]+:(\d+)""").find(info)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it > 0 }
     }
 }

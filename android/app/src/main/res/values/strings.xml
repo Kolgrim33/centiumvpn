@@ -62,11 +62,14 @@
     <string name="settings_exit_summary">Choosing a country can make connections slower and your traffic easier to single out.</string>
     <string name="settings_exit_any">Any country</string>
     <string name="settings_group_bridges">Bridges</string>
-    <string name="settings_bridges_summary">If Tor is blocked where you are, a bridge relay can get you onto the network.</string>
+    <string name="settings_bridges_summary">If Tor is blocked where you are, a bridge can get you onto the network.</string>
+    <string name="settings_bridges_auto">Automatic (recommended): try Tor, then bridges if it\'s blocked</string>
     <string name="settings_bridges_direct">Connect directly</string>
+    <string name="settings_bridges_snowflake">Snowflake</string>
+    <string name="settings_bridges_obfs4">obfs4 bridges</string>
     <string name="settings_bridges_custom">Use my own bridges</string>
-    <string name="settings_bridges_hint">One bridge per line, as IP:port fingerprint</string>
-    <string name="settings_bridges_note">obfs4 and Snowflake bridges aren\'t supported yet.</string>
+    <string name="settings_bridges_hint">One bridge per line</string>
+    <string name="settings_bridges_note">obfs4, Snowflake, WebTunnel and plain IP:port bridges all work. Get bridges at bridges.torproject.org or from @GetBridgesBot on Telegram.</string>
     <string name="settings_save">Save settings</string>
     <string name="settings_save_note">Changes apply the next time you connect.</string>
     <string name="settings_saved">Settings saved</string>

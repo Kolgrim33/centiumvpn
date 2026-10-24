@@ -26,12 +26,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.centium.vpn.CentiumApplication
 import org.centium.vpn.bridge.HevTunnelBridge
+import org.centium.vpn.data.BridgeMode
 import org.centium.vpn.data.CentiumConfig
 import org.centium.vpn.data.CircuitNode
 import org.centium.vpn.data.ConnectionState
 import org.centium.vpn.diagnostics.VerificationMatrix
 import org.centium.vpn.notifications.VpnNotificationManager
 import org.centium.vpn.security.FailClosedGuard
+import org.centium.vpn.tor.BootstrapWatch
+import org.centium.vpn.tor.ConnectStrategy
 import org.centium.vpn.tor.TorManager
 
 class CentiumVpnService : VpnService() {
@@ -161,11 +164,8 @@ class CentiumVpnService : VpnService() {
                     throw IllegalStateException("Failed to start Tor (see Logs)")
                 }
 
-                // Step 2: WAITING_FOR_BOOTSTRAP
-                updateState(ConnectionState.WAITING_FOR_BOOTSTRAP, "Bootstrapping circuit consensus...")
-                if (!torManager.waitForBootstrap(config.connectionTimeoutSeconds)) {
-                    throw IllegalStateException("Tor could not connect to the network (timed out)")
-                }
+                // Step 2: WAITING_FOR_BOOTSTRAP, trying each route until one gets through
+                connectThroughFirstWorkingRoute(config)
 
                 // Step 3: STARTING_BRIDGE
                 updateState(ConnectionState.STARTING_BRIDGE, "Initializing TUN packet bridge...")
@@ -217,6 +217,52 @@ class CentiumVpnService : VpnService() {
                 withContext(Dispatchers.Main) { leaveForeground() }
             }
         }
+    }
+
+    /**
+     * Tries the routes [ConnectStrategy] picks, in order, moving on when one looks blocked.
+     * Returns once Tor has bootstrapped; throws a user-facing message if no route worked.
+     */
+    private suspend fun connectThroughFirstWorkingRoute(config: CentiumConfig) {
+        val prefs = CentiumApplication.instance.preferencesRepository
+        val automatic = config.bridgeMode == BridgeMode.AUTO
+        val routes = ConnectStrategy.routes(config, prefs.lastWorkingRoute)
+        val totalMillis = config.connectionTimeoutSeconds * 1000L
+
+        routes.forEachIndexed { index, route ->
+            val hasFallback = index < routes.lastIndex
+            updateState(
+                ConnectionState.WAITING_FOR_BOOTSTRAP,
+                if (index == 0) "Connecting through ${route.label}..." else "Tor looks blocked here. Trying ${route.label}..."
+            )
+            addLog("[Route] Trying ${route.label}")
+
+            try {
+                torManager.applyRoute(route, config)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                addLog("[Route] Couldn't use ${route.label}: ${e.message}")
+                if (hasFallback) return@forEachIndexed
+                throw IllegalStateException(e.message ?: "Couldn't use ${route.label}")
+            }
+
+            val watch = BootstrapWatch(BootstrapWatch.reachMillis(route), totalMillis, hasFallback)
+            when (torManager.waitForBootstrap(watch)) {
+                BootstrapWatch.Verdict.DONE -> {
+                    addLog("[Route] Connected through ${route.label}")
+                    if (automatic) prefs.lastWorkingRoute = route
+                    return
+                }
+                BootstrapWatch.Verdict.BLOCKED -> addLog("[Route] ${route.label} didn't reach a relay in time")
+                else -> addLog("[Route] ${route.label} timed out")
+            }
+        }
+
+        throw IllegalStateException(
+            if (automatic) "Couldn't reach Tor, even through bridges. Check your internet, or add your own bridges in Settings."
+            else "Tor could not connect to the network (timed out)"
+        )
     }
 
     fun stopVpn() {

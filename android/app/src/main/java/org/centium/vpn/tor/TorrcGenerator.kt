@@ -1,15 +1,17 @@
 package org.centium.vpn.tor
 
-import org.centium.vpn.data.BridgeMode
-import org.centium.vpn.data.BridgeType
 import org.centium.vpn.data.CentiumConfig
 
 /**
- * Generates the user torrc for TorService. TorService itself supplies
- * DataDirectory, ControlSocket and RunAsDaemon on the command line.
+ * Generates the user torrc for TorService, and the settings that switch Tor onto a route.
+ * TorService itself supplies DataDirectory, ControlSocket and RunAsDaemon on the command line.
  */
 class TorrcGenerator {
 
+    /**
+     * Tor starts with the network off. [routeConf] then turns it on for the first route, so
+     * every route, including switching to the next one, goes through the same SETCONF path.
+     */
     fun generateTorrc(config: CentiumConfig): String {
         val lines = mutableListOf<String>()
 
@@ -17,6 +19,7 @@ class TorrcGenerator {
         lines.add("SocksPort 127.0.0.1:auto")
         lines.add("ClientOnly 1")
         lines.add("AvoidDiskWrites 1")
+        lines.add("DisableNetwork 1")
 
         // Exit node country selection
         if (config.exitLocation.isNotEmpty() && config.exitLocation != "auto") {
@@ -28,37 +31,35 @@ class TorrcGenerator {
             lines.add("StrictNodes 1")
         }
 
-        val bridgeLines = when {
-            config.bridgeMode == BridgeMode.BUILTIN && config.bridgeType == BridgeType.SNOWFLAKE ->
-                throw IllegalArgumentException(PT_UNSUPPORTED)
-            config.bridgeMode == BridgeMode.CUSTOM ||
-                (config.bridgeMode == BridgeMode.BUILTIN && config.bridgeType == BridgeType.OBFS4) ->
-                parseBridgeLines(config.customBridges)
-            else -> emptyList()
-        }
-
-        if (bridgeLines.isNotEmpty()) {
-            lines.add("UseBridges 1")
-            bridgeLines.forEach { lines.add("Bridge $it") }
-        }
-
         return lines.joinToString("\n") + "\n"
     }
 
-    private fun parseBridgeLines(raw: String): List<String> {
-        return raw.lines()
-            .map { it.trim().removePrefix("Bridge ").trim() }
-            .filter { it.isNotEmpty() }
-            .onEach { line ->
-                // A vanilla bridge starts with IP:port; anything else names a transport
-                val first = line.substringBefore(' ')
-                if (!first.contains(':')) throw IllegalArgumentException(PT_UNSUPPORTED)
-            }
+    /** Pluggable transports [route] needs running before [routeConf] can be applied. */
+    fun transportsFor(route: Route, config: CentiumConfig): Set<String> =
+        BridgeLines.transports(bridgeLines(route, config))
+
+    /** Settings [routeConf] replaces; [TorManager] resets them before applying a new route. */
+    val routeKeys = listOf("UseBridges", "Bridge", "ClientTransportPlugin")
+
+    /**
+     * SETCONF entries ("Key value") that put Tor on [route], ending by turning the network on.
+     * [transportPorts] maps each running transport to its local SOCKS port.
+     */
+    fun routeConf(route: Route, config: CentiumConfig, transportPorts: Map<String, Int>): List<String> {
+        val bridges = bridgeLines(route, config)
+        if (bridges.isEmpty()) return listOf("UseBridges 0", "DisableNetwork 0")
+
+        val plugins = BridgeLines.transports(bridges).sorted().map { transport ->
+            val port = checkNotNull(transportPorts[transport]) { "The $transport transport isn't running" }
+            "ClientTransportPlugin $transport socks5 127.0.0.1:$port"
+        }
+        return listOf("UseBridges 1") + bridges.map { "Bridge $it" } + plugins + "DisableNetwork 0"
     }
 
-    companion object {
-        private const val PT_UNSUPPORTED =
-            "Pluggable-transport bridges (obfs4/snowflake/meek/webtunnel) are not bundled in this build. " +
-                "Use plain IP:port bridges or disable bridges in Settings."
+    private fun bridgeLines(route: Route, config: CentiumConfig): List<String> = when (route) {
+        Route.DIRECT -> emptyList()
+        Route.SNOWFLAKE -> BuiltinBridges.SNOWFLAKE
+        Route.OBFS4 -> BuiltinBridges.OBFS4
+        Route.CUSTOM -> BridgeLines.parse(config.customBridges)
     }
 }

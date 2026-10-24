@@ -1,0 +1,62 @@
+# Builds the signed Google Play bundle (.aab) for upload to the Play Console.
+# Run it from the Actions tab before tagging a release, so the Play update is live by the time
+# the tag's release email reaches testers. The bundle is kept as a workflow artifact for 14 days.
+name: Play bundle
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Read app version
+        run: |
+          version=$(grep '^centium.versionName=' android/gradle.properties | cut -d= -f2)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-37.1" "build-tools;36.0.0" "ndk;26.3.11579264" > /dev/null
+
+      - name: Build signed bundle
+        working-directory: android
+        env:
+          KEYSTORE_B64: ${{ secrets.CENTIUM_KEYSTORE_B64 }}
+          CENTIUM_KEYSTORE_PASSWORD: ${{ secrets.CENTIUM_KEYSTORE_PASSWORD }}
+          CENTIUM_KEY_ALIAS: ${{ secrets.CENTIUM_KEY_ALIAS }}
+          CENTIUM_KEY_PASSWORD: ${{ secrets.CENTIUM_KEY_PASSWORD }}
+        run: |
+          export CENTIUM_KEYSTORE="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_B64" | base64 -d > "$CENTIUM_KEYSTORE"
+          ./gradlew bundlePlayRelease --no-daemon --console=plain
+          rm -f "$CENTIUM_KEYSTORE"
+
+      - name: Verify signer
+        run: |
+          aab=android/app/build/outputs/bundle/playRelease/app-play-release.aab
+          signer=$(keytool -printcert -jarfile "$aab" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          # Play only accepts bundles signed with the upload key it already knows
+          if [ "$signer" != "${{ vars.CENTIUM_SIGNER_SHA256 }}" ]; then
+            echo "::error::Bundle signer $signer is not the Centium release key"
+            exit 1
+          fi
+          mkdir dist
+          cp "$aab" "dist/centium-$VERSION.aab"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: centium-${{ env.VERSION }}-play
+          path: dist/centium-${{ env.VERSION }}.aab
+          retention-days: 14
+          if-no-files-found: error

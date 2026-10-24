@@ -1,0 +1,3 @@
+- Centium now works where Tor is blocked. If a direct connection doesn't get through, it switches to Snowflake, then to obfs4 bridges, by itself, and remembers what worked for next time.
+- In Settings you can pick Snowflake or obfs4 yourself, or paste your own obfs4, Snowflake or WebTunnel bridges.
+- If you'd chosen "Connect directly" before, you're now on Automatic, which still tries a direct connection first.

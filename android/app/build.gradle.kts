@@ -87,10 +87,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86"))
-        }
-
         externalNativeBuild {
             ndkBuild {
                 // Only the JNI library; upstream also defines a standalone binary
@@ -141,19 +137,28 @@ android {
 
     // github: self-updates from GitHub Releases. fdroid and play: the store delivers updates,
     // so the updater is switched off and its permission/receivers are stripped.
+    // ABIs are set per flavor because flavor abiFilters add to defaultConfig's, never replace them.
+    // github and fdroid ship one APK, so they carry ARM only: the pluggable transports add ~24 MB
+    // per ABI, and x86 devices (Chromebooks, emulators) get Centium from Play instead.
+    // Play splits the bundle per device, so it keeps all four.
+    val armAbis = setOf("arm64-v8a", "armeabi-v7a")
+    val allAbis = armAbis + setOf("x86_64", "x86")
     flavorDimensions += "distribution"
     productFlavors {
         create("github") {
             dimension = "distribution"
             buildConfigField("boolean", "UPDATES_ENABLED", "true")
+            ndk { abiFilters.addAll(armAbis) }
         }
         create("fdroid") {
             dimension = "distribution"
             buildConfigField("boolean", "UPDATES_ENABLED", "false")
+            ndk { abiFilters.addAll(armAbis) }
         }
         create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "UPDATES_ENABLED", "false")
+            ndk { abiFilters.addAll(allAbis) }
         }
     }
 
@@ -190,6 +195,8 @@ dependencies {
     // Tor daemon (libtor.so + TorService) and its control-protocol client
     implementation("info.guardianproject:tor-android:0.4.9.14")
     implementation("info.guardianproject:jtorctl:0.4.5.7")
+    // Snowflake, obfs4 and WebTunnel clients (Lyrebird + Snowflake), as used by Orbot
+    implementation("com.netzarchitekten:IPtProxy:5.7.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

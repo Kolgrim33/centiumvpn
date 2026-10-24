@@ -17,6 +17,16 @@ class PreferencesRepository(context: Context) {
         get() = Route.entries.firstOrNull { it.name == prefs.getString(KEY_LAST_ROUTE, null) }
         set(value) = prefs.edit().putString(KEY_LAST_ROUTE, value?.name).apply()
 
+    /** Domains the user allows past the blocklist (one per line, exactly as entered). */
+    var adBlockAllowlist: String
+        get() = prefs.getString(KEY_AD_BLOCK_ALLOW, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_AD_BLOCK_ALLOW, value).apply()
+
+    /** When the downloaded blocklist was last refreshed, epoch millis, or 0 if never. */
+    var blocklistUpdatedAt: Long
+        get() = prefs.getLong(KEY_BLOCKLIST_UPDATED, 0L)
+        set(value) = prefs.edit().putLong(KEY_BLOCKLIST_UPDATED, value).apply()
+
     // Before 1.3.0, saving Settings stored "Connect directly" (NONE) because it was the only
     // non-custom choice. Automatic still tries direct first, so move those users onto it once.
     private fun migrate() {
@@ -38,6 +48,7 @@ class PreferencesRepository(context: Context) {
             blockIpv6 = prefs.getBoolean(KEY_BLOCK_IPV6, true),
             autoConnect = prefs.getBoolean(KEY_AUTO_CONNECT, false),
             dnsProtection = prefs.getBoolean(KEY_DNS_PROTECTION, true),
+            adBlockEnabled = prefs.getBoolean(KEY_AD_BLOCK, false),
             connectionTimeoutSeconds = prefs.getInt(KEY_TIMEOUT, 120),
             disallowPackages = prefs.getStringSet(KEY_DISALLOWED_PKGS, emptySet()) ?: emptySet()
         )
@@ -53,6 +64,7 @@ class PreferencesRepository(context: Context) {
             .putBoolean(KEY_BLOCK_IPV6, config.blockIpv6)
             .putBoolean(KEY_AUTO_CONNECT, config.autoConnect)
             .putBoolean(KEY_DNS_PROTECTION, config.dnsProtection)
+            .putBoolean(KEY_AD_BLOCK, config.adBlockEnabled)
             .putInt(KEY_TIMEOUT, config.connectionTimeoutSeconds)
             .putStringSet(KEY_DISALLOWED_PKGS, config.disallowPackages)
             .apply()
@@ -68,6 +80,9 @@ class PreferencesRepository(context: Context) {
         private const val KEY_BLOCK_IPV6 = "block_ipv6"
         private const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_DNS_PROTECTION = "dns_protection"
+        private const val KEY_AD_BLOCK = "ad_block_enabled"
+        private const val KEY_AD_BLOCK_ALLOW = "ad_block_allowlist"
+        private const val KEY_BLOCKLIST_UPDATED = "blocklist_updated_at"
         private const val KEY_TIMEOUT = "connection_timeout"
         private const val KEY_DISALLOWED_PKGS = "disallowed_packages"
         private const val KEY_LAST_ROUTE = "last_working_route"

@@ -1,0 +1,41 @@
+# Centium security list: trackers and malware. Used on every build, including Play.
+# Plain domains, one per line. Refreshed over Tor from https://centium.web.app/blocklists/
+# Subdomains of each entry are covered automatically.
+google-analytics.com
+ssl.google-analytics.com
+analytics.google.com
+googletagmanager.com
+googletagservices.com
+stats.g.doubleclick.net
+mixpanel.com
+segment.io
+segment.com
+amplitude.com
+adjust.com
+app-measurement.com
+appsflyer.com
+branch.io
+flurry.com
+scorecardresearch.com
+quantserve.com
+quantcount.com
+hotjar.com
+fullstory.com
+crashlytics.com
+connect.facebook.net
+analytics.tiktok.com
+log-va.tiktokv.com
+mon.tiktokv.com
+mmstat.com
+kochava.com
+singular.net
+newrelic.com
+nr-data.net
+chartbeat.com
+mparticle.com
+bluekai.com
+demdex.net
+omtrdc.net
+everesttech.net
+sc-static.net
+adsymptotic.com

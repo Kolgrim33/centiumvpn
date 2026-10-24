@@ -1,0 +1,87 @@
+# Rebuilds the domain blocklists from upstream sources, commits them as the bundled assets,
+# and deploys them to https://centium.web.app/blocklists/ for the app to refresh over Tor.
+#
+# Two lists: security (trackers + malware, used on every build) and ads (ad networks, off on
+# Play). The app blocks a domain and all its subdomains, so entries are deduplicated to their
+# registrable form upstream already; here we only normalise to plain lowercase domains.
+name: Blocklists
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'   # Mondays, 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build lists
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          # Keep each line's first host token, drop comments/IPs/blanks, lowercase, sort -u.
+          clean() {
+            grep -vE '^\s*[#!]' \
+              | sed -E 's/\r$//; s/^\s*(0\.0\.0\.0|127\.0\.0\.1|::1?|)\s+//; s/\s.*$//' \
+              | sed -E 's#^\|\|##; s#\^.*$##; s#^\*\.##; s#/.*$##' \
+              | tr 'A-Z' 'a-z' \
+              | grep -E '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' \
+              | sort -u
+          }
+          fetch() { curl -fsSL --retry 3 "$1"; }
+
+          # Security: trackers + malware (Play-safe).
+          {
+            fetch https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts\&showintro=0\&mimetype=plaintext || true
+            fetch https://raw.githubusercontent.com/StevenBlack/hosts/master/data/add.2o7Net/hosts || true
+            fetch https://urlhaus.abuse.ch/downloads/hostfile/ || true
+          } | clean > out/security.txt
+
+          # Ads: ad networks (off on Play).
+          {
+            fetch https://adaway.org/hosts.txt || true
+            fetch https://raw.githubusercontent.com/StevenBlack/hosts/master/data/UncheckableHosts/hosts || true
+            fetch https://v.firebog.net/hosts/AdguardDNS.txt || true
+          } | clean > out/ads.txt
+
+          # Never let a failed fetch wipe a list: require a sane minimum, else keep the committed one.
+          for f in security ads; do
+            n=$(wc -l < out/$f.txt)
+            echo "$f: $n domains"
+            if [ "$n" -lt 100 ]; then
+              echo "::warning::$f list too small ($n), keeping existing"
+              cp android/app/src/main/assets/blocklists/$f.txt out/$f.txt
+            fi
+          done
+
+          header() { printf '# Centium %s list. Generated %s. Do not edit by hand.\n' "$1" "$(date -u +%F)"; }
+          { header "security (trackers + malware)"; cat out/security.txt; } > android/app/src/main/assets/blocklists/security.txt
+          { header "ads (ad networks)"; cat out/ads.txt; } > android/app/src/main/assets/blocklists/ads.txt
+          mkdir -p website/public/blocklists
+          cp android/app/src/main/assets/blocklists/security.txt website/public/blocklists/security.txt
+          cp android/app/src/main/assets/blocklists/ads.txt website/public/blocklists/ads.txt
+
+      - name: Commit refreshed lists
+        run: |
+          git config user.name "centium-bot"
+          git config user.email "noreply@centium.web.app"
+          if git diff --quiet -- android/app/src/main/assets/blocklists website/public/blocklists; then
+            echo "No changes"; exit 0
+          fi
+          git add android/app/src/main/assets/blocklists website/public/blocklists
+          git commit -m "chore: refresh blocklists"
+          git push
+
+      - name: Deploy to Firebase Hosting
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        working-directory: website
+        run: |
+          if [ -z "${FIREBASE_TOKEN:-}" ]; then echo "No FIREBASE_TOKEN; skipping deploy"; exit 0; fi
+          npm i -g firebase-tools
+          firebase deploy --only hosting --project centium-app --token "$FIREBASE_TOKEN" --non-interactive

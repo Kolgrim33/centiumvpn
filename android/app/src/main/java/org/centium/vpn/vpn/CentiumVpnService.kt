@@ -26,10 +26,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.centium.vpn.CentiumApplication
 import org.centium.vpn.bridge.HevTunnelBridge
+import org.centium.vpn.blocklist.BlocklistManager
 import org.centium.vpn.data.BridgeMode
 import org.centium.vpn.data.CentiumConfig
 import org.centium.vpn.data.CircuitNode
 import org.centium.vpn.data.ConnectionState
+import org.centium.vpn.data.PreferencesRepository
 import org.centium.vpn.diagnostics.VerificationMatrix
 import org.centium.vpn.notifications.VpnNotificationManager
 import org.centium.vpn.security.FailClosedGuard
@@ -206,6 +208,16 @@ class CentiumVpnService : VpnService() {
                 // Step 7: CONNECTED
                 connectedSince = System.currentTimeMillis()
                 updateState(ConnectionState.CONNECTED, status)
+
+                // Refresh the ad/tracker blocklist over Tor; it takes effect on the next connect.
+                if (config.adBlockEnabled) {
+                    serviceScope.launch(Dispatchers.IO) {
+                        runCatching {
+                            BlocklistManager(applicationContext, PreferencesRepository(applicationContext))
+                                .maybeUpdate(torManager.socksPort)
+                        }
+                    }
+                }
 
                 startSupervisionWatchdog(config)
             } catch (e: CancellationException) {

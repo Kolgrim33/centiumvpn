@@ -1,0 +1,33 @@
+# Centium ad-network list. Added only on builds where ADS_BLOCKING_ALLOWED is set
+# (F-Droid and GitHub), never on Play. Plain domains, one per line.
+doubleclick.net
+googlesyndication.com
+googleadservices.com
+adservice.google.com
+amazon-adsystem.com
+adcolony.com
+applovin.com
+mopub.com
+inmobi.com
+chartboost.com
+vungle.com
+startappservice.com
+startappexchange.com
+tapjoy.com
+smaato.net
+adnxs.com
+casalemedia.com
+rubiconproject.com
+pubmatic.com
+openx.net
+criteo.com
+criteo.net
+taboola.com
+outbrain.com
+3lift.com
+bidswitch.net
+moatads.com
+serving-sys.com
+adform.net
+smartadserver.com
+yieldmo.com

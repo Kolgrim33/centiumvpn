@@ -82,3 +82,17 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "Centium $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md"
+
+      # Tells Play testers about the release. Skipped until the mail secrets exist, and a mail
+      # failure doesn't fail the release, since the APK is already published by now.
+      - name: Email testers
+        continue-on-error: true
+        working-directory: mail
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          TESTER_EMAILS: ${{ secrets.TESTER_EMAILS }}
+        run: |
+          if [ -z "$SMTP_PASS" ]; then echo "Mail secrets not set; skipping"; exit 0; fi
+          npm ci --no-audit --no-fund
+          node send.mjs release "$VERSION" "$RUNNER_TEMP/notes.md"

@@ -1,0 +1,22 @@
+# Sends the "become a tester" invite to everyone in the TESTER_EMAILS secret.
+# Run it from the Actions tab whenever new testers are added to the list.
+name: Email testers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  invite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Send invite
+        working-directory: mail
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          TESTER_EMAILS: ${{ secrets.TESTER_EMAILS }}
+        run: |
+          npm ci --no-audit --no-fund
+          node send.mjs invite

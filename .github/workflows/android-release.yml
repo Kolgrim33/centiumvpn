@@ -95,4 +95,6 @@ jobs:
         run: |
           if [ -z "$SMTP_PASS" ]; then echo "Mail secrets not set; skipping"; exit 0; fi
           npm ci --no-audit --no-fund
-          node send.mjs release "$VERSION" "$RUNNER_TEMP/notes.md"
+          # Testers get mail/notes/<version>.md, plain-language notes, when it exists
+          notes="notes/$VERSION.md"; [ -f "$notes" ] || notes="$RUNNER_TEMP/notes.md"
+          node send.mjs release "$VERSION" "$notes"

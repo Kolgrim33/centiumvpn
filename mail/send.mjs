@@ -29,6 +29,9 @@ function recipients() {
 }
 
 const escape = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Notes may mark a lead-in as **bold**; nothing else is markdown.
+const inline = (s) => escape(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+const plain = (s) => s.replace(/\*\*(.+?)\*\*/g, '$1');
 
 // Wraps a message body in the brand frame: the purple route colour and plain sentence-case copy.
 function frame(heading, bodyHtml) {
@@ -76,20 +79,25 @@ Hit a problem? Just reply to this email. To stop these emails, leave the test at
 
 function releaseMessage(version, notes) {
   const items = notes.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('- ')).map((l) => l.slice(2));
-  const subject = `Centium ${version} is out`;
-  const html = frame(`Centium ${version} is out`, `
-<p style="font-size:15px;line-height:1.6">A new version is rolling out on Google Play. Here's what changed:</p>
-<ul style="font-size:15px;line-height:1.6;padding-left:20px">${items.map((i) => `<li style="margin-bottom:8px">${escape(i)}</li>`).join('')}</ul>
+  const subject = `Centium ${version} is here`;
+  const html = frame(`Centium ${version} is here`, `
+<p style="font-size:15px;line-height:1.6">A new version of Centium is now on Google Play. Here's what's new:</p>
+<ul style="font-size:15px;line-height:1.6;padding-left:20px">${items.map((i) => `<li style="margin-bottom:10px">${inline(i)}</li>`).join('')}</ul>
+<h2 style="margin:28px 0 8px;font-size:17px">How to update</h2>
+<p style="font-size:15px;line-height:1.6;margin:0">Tap the button below, or open the <b>Play Store</b> app, search for <b>Centium VPN</b> and tap <b>Update</b>.</p>
 ${button(STORE_URL, 'Update on Google Play')}
-<p style="font-size:15px;line-height:1.6">Not seeing the update? Make sure you've joined the test at <a href="${TESTING_URL}" style="color:#4A3FD0">${TESTING_URL}</a>.</p>`);
-  const text = `Centium ${version} is out
+<p style="font-size:14px;line-height:1.6;color:#586274">Don't see an update yet? Google can take a day to reach every phone. If it still isn't there, check that you've joined the test at <a href="${TESTING_URL}" style="color:#4A3FD0">this link</a>.</p>`);
+  const text = `Centium ${version} is here
 
-A new version is rolling out on Google Play. Here's what changed:
+A new version of Centium is now on Google Play. Here's what's new:
 
-${items.map((i) => `- ${i}`).join('\n')}
+${items.map((i) => `- ${plain(i)}`).join('\n\n')}
 
-Update on Google Play: ${STORE_URL}
-Not seeing the update? Make sure you've joined the test: ${TESTING_URL}
+How to update
+Open the Play Store app, search for Centium VPN and tap Update, or use this link:
+${STORE_URL}
+
+Don't see an update yet? Google can take a day to reach every phone. If it still isn't there, check that you've joined the test: ${TESTING_URL}
 
 Thanks for testing,
 The Centium Team

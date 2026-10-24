@@ -40,7 +40,7 @@ ${bodyHtml}
 <p style="margin:28px 0 0;font-size:15px">Thanks for testing,<br>The Centium Team</p>
 </td></tr></table>
 <p style="max-width:520px;margin:16px 0 0;font-size:12px;color:#586274;line-height:1.5">You're getting this because you signed up to test Centium VPN.
-This address doesn't take replies. To stop these emails, leave the test at <a href="${TESTING_URL}" style="color:#586274">${TESTING_URL}</a>.</p>
+Hit a problem? Just reply to this email. To stop these emails, leave the test at <a href="${TESTING_URL}" style="color:#586274">${TESTING_URL}</a>.</p>
 </td></tr></table></body></html>`;
 }
 
@@ -66,7 +66,7 @@ Then install Centium from the Play Store: ${STORE_URL}
 Thanks for testing,
 The Centium Team
 
-This address doesn't take replies. To stop these emails, leave the test at ${TESTING_URL}`;
+Hit a problem? Just reply to this email. To stop these emails, leave the test at ${TESTING_URL}`;
   return { subject, html, text };
 }
 
@@ -90,7 +90,7 @@ Not seeing the update? Make sure you've joined the test: ${TESTING_URL}
 Thanks for testing,
 The Centium Team
 
-This address doesn't take replies. To stop these emails, leave the test at ${TESTING_URL}
+Hit a problem? Just reply to this email. To stop these emails, leave the test at ${TESTING_URL}
 ${SITE_URL}`;
   return { subject, html, text };
 }

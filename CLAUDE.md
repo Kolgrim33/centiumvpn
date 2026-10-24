@@ -112,7 +112,7 @@ The concept is a transit map of the Tor route. On the Connect screen, `ui/RouteL
 
 ## Tester emails (`mail/`)
 
-- **What:** `mail/send.mjs` emails the Play testers as "Centium Team" through a free Gmail account (SMTP + app password). `invite` asks them to join at https://play.google.com/apps/testing/org.centium.vpn; `release <version> <notes.md>` announces a version. `--dry-run` prints instead of sending.
+- **What:** `mail/send.mjs` emails the Play testers as "Centium Team" through the owner's Gmail (SMTP + app password); replies land in that inbox. `invite` asks them to join at https://play.google.com/apps/testing/org.centium.vpn; `release <version> <notes.md>` announces a version. `--dry-run` prints instead of sending.
 - **Automatic:** the "Email testers" step at the end of `android-release.yml` sends the release email on every tag (skipped while the secrets are unset; a failure doesn't fail the release). The invite is the manual `email-testers.yml` workflow.
 - **Secrets:** `SMTP_USER`, `SMTP_PASS`, `TESTER_EMAILS` (comma separated). The repo is public, so never commit the tester list; the source is `~/Documents/Mailing List playstore/Mailing list.xlsx`.
 - **Sending:** one message per tester, so nobody sees the others' addresses. Gmail allows about 500 a day.

@@ -13,6 +13,8 @@ import nodemailer from 'nodemailer';
 const TESTING_URL = 'https://play.google.com/apps/testing/org.centium.vpn';
 const STORE_URL = 'https://play.google.com/store/apps/details?id=org.centium.vpn';
 const SITE_URL = 'https://centium.web.app';
+// Gmail won't show SVG, so the header uses a PNG of assets/logo/centium-icon-512.png hosted with the site.
+const LOGO_URL = `${SITE_URL}/email-logo.png`;
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
@@ -33,7 +35,9 @@ function frame(heading, bodyHtml) {
   return `<!doctype html><html><body style="margin:0;background:#F6F7F9;font-family:Arial,Helvetica,sans-serif;color:#161C27">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:12px">
-<tr><td style="background:#4A3FD0;border-radius:12px 12px 0 0;padding:20px 28px;color:#FFFFFF;font-size:20px;font-weight:bold">Centium</td></tr>
+<tr><td style="padding:24px 28px 0"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
+<td><img src="${LOGO_URL}" width="44" height="44" alt="" style="display:block;border:0;border-radius:10px"></td>
+<td style="padding-left:12px;font-size:20px;font-weight:bold;color:#161C27">Centium</td></tr></table></td></tr>
 <tr><td style="padding:28px">
 <h1 style="margin:0 0 16px;font-size:22px">${heading}</h1>
 ${bodyHtml}

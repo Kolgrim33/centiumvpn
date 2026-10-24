@@ -1,0 +1,12 @@
+{
+  "name": "centium-mail",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "invite": "node send.mjs invite",
+    "release": "node send.mjs release"
+  },
+  "dependencies": {
+    "nodemailer": "10.2.1"
+  }
+}

@@ -110,6 +110,13 @@ The concept is a transit map of the Tor route. On the Connect screen, `ui/RouteL
 - **Commands (in `website/`):** `npm run test:rules` (rules tests on the emulator), `npm run serve` (local site + Firestore emulator on :5055/:8085; seed `stats/downloads` there with `Authorization: Bearer owner`), `npm run deploy`.
 - **Privacy:** no analytics, cookies or third-party scripts; fonts are self-hosted.
 
+## Tester emails (`mail/`)
+
+- **What:** `mail/send.mjs` emails the Play testers as "Centium Team" through a free Gmail account (SMTP + app password). `invite` asks them to join at https://play.google.com/apps/testing/org.centium.vpn; `release <version> <notes.md>` announces a version. `--dry-run` prints instead of sending.
+- **Automatic:** the "Email testers" step at the end of `android-release.yml` sends the release email on every tag (skipped while the secrets are unset; a failure doesn't fail the release). The invite is the manual `email-testers.yml` workflow.
+- **Secrets:** `SMTP_USER`, `SMTP_PASS`, `TESTER_EMAILS` (comma separated). The repo is public, so never commit the tester list; the source is `~/Documents/Mailing List playstore/Mailing list.xlsx`.
+- **Sending:** one message per tester, so nobody sees the others' addresses. Gmail allows about 500 a day.
+
 ## Conventions
 
 - **Git:** work on a branch, then merge to `main`. The submodule is a gitlink, so commit submodule bumps deliberately.

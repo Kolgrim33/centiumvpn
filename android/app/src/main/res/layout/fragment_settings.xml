@@ -131,10 +131,34 @@
                     android:layout_marginTop="6dp">
 
                     <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/rbBridgeAuto"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_bridges_auto"
+                        android:textAppearance="@style/TextAppearance.Centium.Body"
+                        android:textColor="@color/ink" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
                         android:id="@+id/rbBridgeNone"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_bridges_direct"
+                        android:textAppearance="@style/TextAppearance.Centium.Body"
+                        android:textColor="@color/ink" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/rbBridgeSnowflake"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_bridges_snowflake"
+                        android:textAppearance="@style/TextAppearance.Centium.Body"
+                        android:textColor="@color/ink" />
+
+                    <com.google.android.material.radiobutton.MaterialRadioButton
+                        android:id="@+id/rbBridgeObfs4"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_bridges_obfs4"
                         android:textAppearance="@style/TextAppearance.Centium.Body"
                         android:textColor="@color/ink" />
 

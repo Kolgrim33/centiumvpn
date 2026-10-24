@@ -3,6 +3,11 @@
 Each `## x.y.z` section becomes the GitHub release notes and the in-app
 "What's new" dialog. Write for users: what changed for them, in plain words.
 
+## 1.3.0
+- Centium now works where Tor is blocked. If a direct connection doesn't get through, it switches to Snowflake, then to obfs4 bridges, by itself, and remembers what worked for next time.
+- In Settings you can pick Snowflake or obfs4 yourself, or paste your own obfs4, Snowflake or WebTunnel bridges.
+- If you'd chosen "Connect directly" before, you're now on Automatic, which still tries a direct connection first.
+
 ## 1.2.3
 - Apps that try a fast connection type Tor can't carry, like TikTok's comments, are now told straight away and switch to one that works, instead of hanging.
 - Centium now targets Android 16, and its screens use the whole display on newer phones.

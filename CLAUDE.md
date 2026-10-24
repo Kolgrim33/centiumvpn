@@ -11,7 +11,11 @@ Connect flow (`vpn/CentiumVpnService.kt`):
 1. `tor/TorManager` binds tor-android's in-process `TorService`.
    - Tor picks its SOCKS port (`SocksPort auto`).
    - Control goes over TorService's Unix socket via jtorctl; there are no fixed ports.
-2. The service waits for bootstrap to reach 100%.
+   - Tor starts with `DisableNetwork 1`. Every route is applied live over the control connection (Tor can't safely be restarted in-process).
+2. `connectThroughFirstWorkingRoute` tries the routes `tor/ConnectStrategy` picks until one bootstraps to 100%:
+   - **Automatic** (default): direct → Snowflake → obfs4, starting with the route that worked last (`lastWorkingRoute` pref). An explicit Settings choice is the only route tried.
+   - **Applying a route** (`TorManager.applyRoute`): start the transports it needs, `SETCONF DisableNetwork=1`, `RESETCONF` the route keys, then `SETCONF` the new bridges with `DisableNetwork 0` last.
+   - **Blocked vs slow** (`tor/BootstrapWatch`): a route that hasn't reached 15% (talked to a relay) within 30 s direct, 40 s obfs4 or 75 s Snowflake is blocked, so the next is tried. Past 15% it gets the full timeout. The last route is never cut short.
 3. `vpn/TunConfiguration` builds the TUN.
    - It captures all IPv4 and IPv6.
    - The app's own package is excluded, so Tor's relay traffic doesn't loop back into the tunnel.
@@ -26,7 +30,10 @@ Other notes:
 - **Native bridge:** hev-socks5-tunnel is a git submodule pinned to 2.18.0. Its JNI registers natives on `hev.htproxy.TProxyService` (`java/hev/htproxy/TProxyService.kt`), so don't rename or move that class. After cloning, run `git submodule update --init --recursive`.
   - **Patches:** the Gradle task `prepareHev` copies the submodule to `app/build/hev-socks5-tunnel/` and applies `src/main/jni/patches/*.patch`; ndk-build compiles that copy, so the submodule stays upstream. When bumping hev, check the patches still apply.
   - **UDP:** `hev-udp-reject.patch` adds `udp: 'reject'`: non-DNS UDP gets ICMP port unreachable, because Tor can't carry UDP. Without it, apps using QUIC (e.g. TikTok) hang until a timeout before falling back to TCP.
-- **Bridges:** pluggable transports (obfs4, Snowflake) are not bundled. `TorrcGenerator` rejects them, and only plain `IP:port` bridges work.
+- **Bridges:** IPtProxy (`com.netzarchitekten:IPtProxy`) runs the Snowflake, obfs4 and WebTunnel clients in-process; `tor/TransportManager` is the only code that touches it (one Controller per process).
+  - `tor/BuiltinBridges` is copied from tor-browser-build `projects/tor-expert-bundle/pt_config.json`. Refresh it before each release. There are no built-in WebTunnel bridges: users paste those as custom bridges.
+  - `tor/BridgeLines` validates custom lines (obfs4, snowflake, webtunnel or plain `IP:port`); meek isn't offered.
+  - **jtorctl gotcha:** `setConf` crashes on an entry without a value (missing `continue`), so clear settings with `resetConf`.
 
 ## Building (Android)
 
@@ -39,6 +46,7 @@ Other notes:
   - Keep `--max-workers=2`. A full parallel build, which includes NDK builds for 4 ABIs, has OOM-killed this machine.
   - The SDK is at `~/Android/Sdk`, set in `android/local.properties` (gitignored).
   - If ndk-build reports a stale path, delete `android/app/.cxx` and `android/app/build/.cxx` and `android/app/build/intermediates/cxx`.
+- **ABIs:** per flavor, because flavor `abiFilters` add to defaultConfig's. `github` and `fdroid` ship one APK, so ARM only (the transports add ~24 MB per ABI); `play` keeps all four. Use a `play` build on the x86_64 emulator.
 - **Flavors:** `github` (self-updater on), `fdroid` and `play` (updater off; `src/fdroid/` and `src/play/AndroidManifest.xml` strip `REQUEST_INSTALL_PACKAGES` and the update receivers, since stores deliver updates and Play forbids self-updating). Build one with e.g. `assembleGithubDebug` or `assembleFdroidRelease`; the Play upload is `bundlePlayRelease` (an `.aab`). A bare `assembleDebug` builds all three.
 - **targetSdk 36** (Play's minimum). The app draws edge to edge on every Android version: `MainActivity.fitSystemBars()` pads for the system bars and hides the bottom nav while the keyboard is open.
 - **Output:** `android/app/build/outputs/apk/<flavor>/<type>/`. Debug builds use the package `org.centium.vpn.debug` and release builds `org.centium.vpn`.
@@ -55,7 +63,8 @@ Other notes:
   3. checks the signer against the `CENTIUM_SIGNER_SHA256` repo variable;
   4. publishes `centium-x.y.z.apk` and a `.sha256`, using the changelog section as the notes.
 - **versionCode** must equal `major*10000 + minor*100 + patch` and must only ever increase. Never reuse or lower a version.
-- **Release key:** `~/Android/centium-release/` (keystore + `signing.properties`), referenced from `android/local.properties` as `centium.signing`. If it's lost, every user must uninstall and reinstall. Never commit it.
+- **Release key:** it was kept in `~/Android/centium-release/`, referenced from `android/local.properties` as `centium.signing`, but that folder was lost in Oct 2026. The only copy is the `CENTIUM_KEYSTORE_B64` repo secret, so release builds happen in CI. If it's lost, every GitHub user must uninstall and reinstall. Never commit it.
+- **Play bundle:** run the "Play bundle" workflow (`.github/workflows/play-bundle.yml`) from the Actions tab. It builds `bundlePlayRelease`, checks the signer, and keeps `centium-x.y.z.aab` as an artifact. Upload that to Play before pushing the tag, since the tag also emails testers.
 - **App side (`update/`):** `UpdateManager` checks GitHub `releases/latest` at most every 20h, after the VPN connects and only through Tor's SOCKS port. "Check now" in Settings goes direct when disconnected.
   - **Verification:** `UpdateVerifier` requires a matching SHA-256, the same package, a higher versionCode and the same signing cert before `UpdateInstaller` (PackageInstaller session) runs.
   - **After install:** `PackageReplacedReceiver` reconnects if the VPN was on, and `MainActivity` shows "What's new" once.

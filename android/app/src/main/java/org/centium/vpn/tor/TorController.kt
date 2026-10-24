@@ -20,6 +20,23 @@ class TorController(
         }
     }
 
+    /**
+     * Applies SETCONF entries, each "Key value", in one command so Tor validates them together.
+     * Throws with Tor's reason if it refuses them. jtorctl crashes on an entry without a value,
+     * so use [resetConf] to clear settings.
+     */
+    suspend fun setConf(entries: List<String>) = withContext(Dispatchers.IO) {
+        require(entries.all { ' ' in it }) { "Every SETCONF entry needs a value: $entries" }
+        val conn = connection() ?: throw IllegalStateException("Tor's control connection is closed")
+        conn.setConf(entries)
+    }
+
+    /** Resets settings to Tor's defaults (RESETCONF). Throws if Tor refuses. */
+    suspend fun resetConf(keys: List<String>) = withContext(Dispatchers.IO) {
+        val conn = connection() ?: throw IllegalStateException("Tor's control connection is closed")
+        conn.resetConf(keys)
+    }
+
     suspend fun signalNewnym(): Boolean = withContext(Dispatchers.IO) {
         try {
             val conn = connection() ?: return@withContext false

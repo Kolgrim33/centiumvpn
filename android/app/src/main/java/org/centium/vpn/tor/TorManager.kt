@@ -24,6 +24,7 @@ class TorManager(
     private val onLog: (String) -> Unit
 ) {
     private val torrcGenerator = TorrcGenerator()
+    private val transports = TransportManager(context, onLog)
 
     @Volatile
     private var torService: TorService? = null
@@ -83,19 +84,43 @@ class TorManager(
             return false
         }
 
-        return withTimeoutOrNull(15_000) { connected.await() } != null
+        val service = withTimeoutOrNull(15_000) { connected.await() } ?: return false
+
+        // Tor starts with DisableNetwork 1; routes are applied over the control connection
+        val control = withTimeoutOrNull(15_000) {
+            while (service.torControlConnection == null) delay(100)
+            true
+        }
+        if (control == null) onLog("[Tor Error] Tor's control connection didn't come up.")
+        return control != null
     }
 
-    suspend fun waitForBootstrap(timeoutSeconds: Int = 60): Boolean = withContext(Dispatchers.IO) {
-        val deadline = System.currentTimeMillis() + timeoutSeconds * 1000L
-        var lastPercent = -1
+    /**
+     * Puts the running Tor onto [route]: starts the transports it needs, pauses the network,
+     * clears the previous route, applies the new one (which turns the network back on), then
+     * stops transports no longer used. Pausing first means Tor never connects with a
+     * half-applied route. Throws if any step fails.
+     */
+    suspend fun applyRoute(route: Route, config: CentiumConfig) = withContext(Dispatchers.IO) {
+        val needed = torrcGenerator.transportsFor(route, config)
+        val conf = torrcGenerator.routeConf(route, config, transports.ensureRunning(needed))
+        controller.setConf(listOf("DisableNetwork 1"))
+        controller.resetConf(torrcGenerator.routeKeys)
+        controller.setConf(conf)
+        transports.stopOthers(keep = needed)
+    }
 
-        while (System.currentTimeMillis() < deadline) {
-            val service = torService
-            if (service == null) {
-                onLog("[Tor Error] Tor service stopped while bootstrapping.")
-                return@withContext false
-            }
+    /** Polls bootstrap until [watch] decides; throws if Tor itself goes away meanwhile. */
+    suspend fun waitForBootstrap(watch: BootstrapWatch): BootstrapWatch.Verdict =
+        withContext(Dispatchers.IO) { pollBootstrap(watch) }
+
+    private suspend fun pollBootstrap(watch: BootstrapWatch): BootstrapWatch.Verdict {
+        val started = System.currentTimeMillis()
+        var lastPercent = -1
+        var doneAt = 0L
+
+        while (true) {
+            val service = torService ?: throw IllegalStateException("Tor stopped while connecting")
 
             val phase = controller.getBootstrapPhase()
             if (phase != null && phase.percent != lastPercent) {
@@ -104,19 +129,27 @@ class TorManager(
                 onLog("[Tor] Bootstrapped ${phase.percent}%: ${phase.summary}")
             }
 
-            if (phase != null && phase.percent >= 100) {
-                socksPort = service.socksPort
-                if (socksPort > 0) {
-                    onLog("[Tor] SOCKS5 listening on 127.0.0.1:$socksPort")
-                    return@withContext true
+            val now = System.currentTimeMillis()
+            when (val verdict = watch.verdict(phase?.percent ?: 0, now - started)) {
+                BootstrapWatch.Verdict.WAIT -> {}
+                BootstrapWatch.Verdict.DONE -> {
+                    socksPort = service.socksPort
+                    if (socksPort > 0) {
+                        onLog("[Tor] SOCKS5 listening on 127.0.0.1:$socksPort")
+                        return verdict
+                    }
+                    // Bootstrapped, but TorService hasn't reported the SOCKS port yet
+                    if (doneAt == 0L) doneAt = now
+                    if (now - doneAt > 15_000) {
+                        onLog("[Tor Error] Tor bootstrapped but never reported its SOCKS port.")
+                        return BootstrapWatch.Verdict.TIMED_OUT
+                    }
                 }
+                else -> return verdict
             }
 
             delay(500)
         }
-
-        onLog("[Tor Warning] Bootstrap timed out after ${timeoutSeconds}s.")
-        false
     }
 
     fun stop() {
@@ -128,5 +161,6 @@ class TorManager(
         serviceConnection = null
         torService = null
         socksPort = -1
+        transports.stopOthers()
     }
 }

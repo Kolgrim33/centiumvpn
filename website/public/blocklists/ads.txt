@@ -1,4 +1,4 @@
-# Centium ads (ad networks) list. Generated 2026-10-26. Do not edit by hand.
+# Centium ads (ad networks) list. Generated 2026-11-02. Do not edit by hand.
 0.avmarket.rs
 0.myikas.com
 0.net.easyjet.com

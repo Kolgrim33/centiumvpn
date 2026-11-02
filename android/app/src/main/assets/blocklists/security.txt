@@ -1,4 +1,4 @@
-# Centium security (trackers + malware) list. Generated 2026-10-26. Do not edit by hand.
+# Centium security (trackers + malware) list. Generated 2026-11-02. Do not edit by hand.
 101com.com
 102.112.2o7.net
 102.122.2o7.net
@@ -48,6 +48,7 @@
 7cnq.net
 82o9v830.com
 a-ads.com
+a.bestcontentfood.top
 a.mktw.net
 a.pemsrv.com
 a.sakh.com
@@ -273,7 +274,6 @@ adcell.de
 adcenter.net
 adclick.com
 adclient1.tucows.com
-adclixx.net
 adcolony.com
 adcomplete.com
 adconion.com
@@ -301,6 +301,7 @@ adforce.com
 adform.com
 adform.net
 adformdsp.net
+adfox.cam
 adhaven.com
 adhese.be
 adhese.com
@@ -520,7 +521,6 @@ ads.fool.com
 ads.footymad.net
 ads.forbes.net
 ads.formit.cz
-ads.fortunecity.com
 ads.fotosidan.se
 ads.friendfinder.com
 ads.gamecity.net
@@ -569,6 +569,7 @@ ads.lesbianpersonals.com
 ads.liberte.pl
 ads.linkedin.com
 ads.livenation.com
+ads.locksecures.com
 ads.lzjl.com
 ads.ma7.tv
 ads.mail.bg
@@ -794,7 +795,6 @@ adservrs.com
 adservrs.com.edgekey.net
 adsfac.eu
 adsfac.net
-adsflowprime.top
 adshrink.it
 adside.com
 adsiduous.com
@@ -1379,6 +1379,7 @@ ba.afl.rakuten.co.jp
 babycentercom.112.2o7.net
 backbeatmedia.com
 backtension.com
+bagave.com
 bagsurprise.com
 bahn.de.102.122.2o7.net
 bahn.de.122.2o7.net
@@ -1435,7 +1436,6 @@ bannerserver.com
 bannersng.yell.com
 bannerspace.com
 bannerswap.com
-bannertrack.net
 bannery.cz
 bannieres.wdmedia.net
 bans.bride.ru
@@ -1878,7 +1878,6 @@ clickboothlnk.com
 clickbrokers.com
 clickcease.com
 clickdensity.com
-clickedyclick.com
 clickfuse.com
 clickhereforcellphones.com
 clickngo.top
@@ -2161,6 +2160,7 @@ dexdexprod.112.2o7.net
 dfbfussballdeprod.112.2o7.net
 dgag.112.2o7.net
 dianomi.com
+dicecandies.com
 didtheyreadit.com
 digestiondrawer.com
 digital-ads.s3.amazonaws.com
@@ -3069,6 +3069,7 @@ liveintent.com
 livelylaugh.com
 livenation.122.2o7.net
 liverail.com
+livetrafficfeed.com
 livingsleet.com
 lizardslaugh.com
 lkqd.com
@@ -3113,7 +3114,6 @@ madcpms.com
 madinad.com
 madisonavenue.com
 madvertise.de
-magicadz.co
 magicaljoin.com
 magnetise.io
 magsrv.com
@@ -3650,7 +3650,6 @@ oas.roanoke.com
 oas.toronto.com
 oas.uniontrib.com
 oascentral.chicagobusiness.com
-oascentral.fortunecity.com
 oascentral.register.com
 oberonincredig.112.2o7.net
 oberoniplay.112.2o7.net
@@ -3981,6 +3980,7 @@ pureclarity.net
 pushengage.com
 pushno.com
 pushtrack.co
+pushub.net
 px.dynamicyield.com
 px.gfycat.com
 px.mountain.com
@@ -4853,6 +4853,7 @@ stats.pusher.com
 stats.rdphv.net
 stats.self.com
 stats.stb-ottow.de
+stats.topofblogs.com
 stats.townnews.com
 stats.wordpress.com
 stats.wp.com
@@ -5288,7 +5289,6 @@ usatoday1.112.2o7.net
 usdm.122.2o7.net
 usenpita.122.2o7.net
 userreplay.com
-users.maxcluster.net
 usmtprod.112.2o7.net
 usnews.122.2o7.net
 ussearch.122.2o7.net

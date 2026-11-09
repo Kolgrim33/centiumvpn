@@ -1,4 +1,4 @@
-# Centium security (trackers + malware) list. Generated 2026-11-02. Do not edit by hand.
+# Centium security (trackers + malware) list. Generated 2026-11-09. Do not edit by hand.
 101com.com
 102.112.2o7.net
 102.122.2o7.net
@@ -436,6 +436,7 @@ ads-img.mozilla.org
 ads-impressions.com
 ads-monitor.xyz
 ads-twitter.com
+ads.365.mk
 ads.5ci.lt
 ads.73dpi.com
 ads.aavv.com
@@ -649,7 +650,6 @@ ads.sun.com
 ads.suomiautomaatti.com
 ads.supplyframe.com
 ads.syscdn.de
-ads.themovienation.com
 ads.thestar.com
 ads.thrillsaffiliates.com
 ads.tiktok.com
@@ -793,7 +793,6 @@ adserving.unibet.com
 adservingfront.com
 adservrs.com
 adservrs.com.edgekey.net
-adsfac.eu
 adsfac.net
 adshrink.it
 adside.com
@@ -1031,6 +1030,7 @@ amexopenprod.122.2o7.net
 amgpprod.112.2o7.net
 amidsttruly.com
 ampacr6prod.112.2o7.net
+ampscamp.net
 amsstellensucheneuwebsiteproduction.112.2o7.net
 amswebproduction.112.2o7.net
 amung.us
@@ -1826,7 +1826,6 @@ classifiedventures1.112.2o7.net
 classmatescom.112.2o7.net
 clck.ru
 clevernt.com
-click-1.pl
 click-v4.expclknb.com
 click.airmalta-mail.com
 click.aliexpress.com
@@ -1870,6 +1869,7 @@ click.v.visionlab.es
 click2freemoney.com
 click4.pro
 clickadddilla.com
+clickadu.io
 clickadz.com
 clickagents.com
 clickbank.com
@@ -2038,6 +2038,7 @@ counter.yadro.ru
 counting.kmindex.ru
 coupling-media.de
 couponchief.122.2o7.net
+cowbelltime.com
 coxhsi.112.2o7.net
 coxmt.com
 coxnet.112.2o7.net
@@ -2599,7 +2600,6 @@ go.scmagazine.com
 go.xlirdr.com
 go2affise.com
 go2cloud.org
-godseedband.com
 goingplatinum.com
 goldstats.com
 gondolagnome.com
@@ -2727,6 +2727,7 @@ hostedads.realitykings.com
 hotelscom.122.2o7.net
 hotjar.com
 hotlog.ru
+hotrank.com.tw
 hoverowl.com
 hpepdfembedapi.112.2o7.net
 hphqglobal.112.2o7.net
@@ -2763,6 +2764,7 @@ ibibo.112.2o7.net
 ibillboard.com
 ice.112.2o7.net
 icptrack.com
+icywinter.com
 id5-sync.com
 idealadvertising.net
 idevaffiliate.com
@@ -2979,7 +2981,6 @@ laxpsd.112.2o7.net
 laxtrb.112.2o7.net
 laxwht.112.2o7.net
 laxwht.122.2o7.net
-layer-ad.de
 layer-ads.de
 lazybumblebee.com
 lbn.ru
@@ -2987,7 +2988,6 @@ lccronadevelopment.112.2o7.net
 ldscol.112.2o7.net
 lead02.com
 leadboltads.net
-leadclick.com
 leadinfo.net
 leadingedgecash.com
 leadplace.fr
@@ -3047,7 +3047,6 @@ linkexchange.com
 linkprice.com
 linkrain.com
 linkreferral.com
-links-ranking.de
 links.email.crunchbase.com
 links.housekeep.com
 links.prosservice.fr
@@ -3060,7 +3059,6 @@ linksynergy.com
 linktarget.com
 linkvertise.com
 lintv.122.2o7.net
-liquidad.narrowcastmedia.com
 litix.io
 live.trmzum.com
 liveadexchanger.com
@@ -3122,7 +3120,6 @@ mailtribunecom.112.2o7.net
 malaysiaairlines.112.2o7.net
 maliva-mcs.byteoversea.com
 maltiverse.lt.acemlnc.com
-manageadv.cblogs.eu
 manpower.122.2o7.net
 mantisadnetwork.com
 mapcommand.com
@@ -3399,7 +3396,6 @@ monsterpops.com
 montblanc.122.2o7.net
 montblanccom.122.2o7.net
 mookie1.com
-moonwager.com
 mopub.com
 morefolks.com
 mormonorg.112.2o7.net
@@ -3665,7 +3661,6 @@ offer.sponsorpay.com
 offerforge.com
 offermatica.com
 offers.gateway-lts450.com
-offers.ltsc-has.com
 offshoregeology.com
 ogads-pa.googleapis.com
 oglasi.posjetnica.com
@@ -3859,6 +3854,7 @@ plausible.avris.it
 plausibleio.workers.dev
 play4traffic.com
 playhaven.com
+playwarren.com
 pldev.112.2o7.net
 pleasantpump.com
 plista.com
@@ -4010,6 +4006,7 @@ quirkysugar.com
 quisma.com
 quizzicalzephyr.com
 qwestfull.112.2o7.net
+r.brandreward.com
 r.drinksdirect.net
 r.logrocket.io
 r.marketing.dubaisothebys.com
@@ -4805,6 +4802,7 @@ spylog.com
 spyrep.com
 spywarelabs.com
 spywords.com
+srv.sayyac.com
 srvmath.com
 srvtrck.com
 srwww1.com
@@ -5107,7 +5105,6 @@ touchclarity.com
 tour.brazzers.com
 toyotamotorcorporation.122.2o7.net
 tpciletsgo.112.2o7.net
-tr.api.fanbyte.com
 tr.p.360.cn
 tracecontent.com
 track-eu.customer.io

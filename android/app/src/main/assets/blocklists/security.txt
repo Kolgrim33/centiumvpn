@@ -1,4 +1,4 @@
-# Centium security (trackers + malware) list. Generated 2026-11-09. Do not edit by hand.
+# Centium security (trackers + malware) list. Generated 2026-11-16. Do not edit by hand.
 101com.com
 102.112.2o7.net
 102.122.2o7.net
@@ -112,6 +112,7 @@ abprod.112.2o7.net
 absorbingband.com
 abstractedauthority.com
 abtasty.com
+abu.usaday.biz
 ac.rnm.ca
 accelerategsprod.112.2o7.net
 acckalaharinet.112.2o7.net
@@ -767,7 +768,6 @@ adserver.nydailynews.com
 adserver.o2.pl
 adserver.oddschecker.com
 adserver.omroepzeeland.nl
-adserver.otthonom.hu
 adserver.pampa.com.br
 adserver.piksel.mk
 adserver.pl
@@ -1417,7 +1417,6 @@ bannerpower.com
 banners.adultfriendfinder.com
 banners.amigos.com
 banners.asiafriendfinder.com
-banners.babylon-x.com
 banners.bol.com.br
 banners.cams.com
 banners.czi.cz
@@ -1956,6 +1955,7 @@ cnoompprod.112.2o7.net
 cnt1.pocitadlo.cz
 cnvlink.com
 cny.yoyo.org
+coalmerchants.com
 code.etracker.com
 codeadnetwork.com
 cognitiv.ai
@@ -2125,6 +2125,7 @@ damdoor.com
 dapper.net
 dardenrestaurants.112.2o7.net
 darngavel.com
+dash.kryon.one
 data.hailuo.ai
 datapickles.com
 datenow.link
@@ -2490,7 +2491,6 @@ freelogs.com
 freepay.com
 freestats.com
 freestats.tv
-freewebcounter.com
 freewheel.com
 freewheel.tv
 freezingbuilding.com
@@ -2981,6 +2981,7 @@ laxpsd.112.2o7.net
 laxtrb.112.2o7.net
 laxwht.112.2o7.net
 laxwht.122.2o7.net
+layer-ad.de
 layer-ads.de
 lazybumblebee.com
 lbn.ru
@@ -2988,6 +2989,7 @@ lccronadevelopment.112.2o7.net
 ldscol.112.2o7.net
 lead02.com
 leadboltads.net
+leadclick.com
 leadinfo.net
 leadingedgecash.com
 leadplace.fr
@@ -3047,9 +3049,9 @@ linkexchange.com
 linkprice.com
 linkrain.com
 linkreferral.com
+links-ranking.de
 links.email.crunchbase.com
 links.housekeep.com
-links.prosservice.fr
 links.zoopla.co.uk
 linksoutside.com
 linkstable.com
@@ -3059,6 +3061,7 @@ linksynergy.com
 linktarget.com
 linkvertise.com
 lintv.122.2o7.net
+liquidad.narrowcastmedia.com
 litix.io
 live.trmzum.com
 liveadexchanger.com
@@ -3661,6 +3664,7 @@ offer.sponsorpay.com
 offerforge.com
 offermatica.com
 offers.gateway-lts450.com
+offers.ltsc-has.com
 offshoregeology.com
 ogads-pa.googleapis.com
 oglasi.posjetnica.com
@@ -4158,7 +4162,6 @@ rtb.gumgum.com
 rtbadzesto.com
 rtbflairads.com
 rtbplatform.net
-rtbpop.com
 rtmark.net
 rtst.122.2o7.net
 rtxplatform.com
@@ -4174,6 +4177,7 @@ rundsp.com
 ruralrobin.com
 rwhgrosewoodhotelsprod.112.2o7.net
 s.adroll.com
+s.appreports.net
 s.click.aliexpress.com
 s.dmmew.com
 s.uuidksinc.net
@@ -4772,6 +4776,7 @@ sparklingshelf.com
 sparknetworks.112.2o7.net
 sparkstudios.com
 speakol.com
+speciesjewelry.com
 specificmedia.co.uk
 specificpop.com
 speedomizer.com
@@ -5499,7 +5504,6 @@ www.kaplanindex.com
 www.photo-ads.co.uk
 www8.glam.com
 wwwpromoter.com
-x-traceur.com
 x6.yakiuchi.com
 xad.com
 xapads.com

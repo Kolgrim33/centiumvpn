@@ -1,4 +1,4 @@
-# Centium security (trackers + malware) list. Generated 2026-11-16. Do not edit by hand.
+# Centium security (trackers + malware) list. Generated 2026-11-23. Do not edit by hand.
 101com.com
 102.112.2o7.net
 102.122.2o7.net
@@ -140,6 +140,7 @@ ad-balancer.at
 ad-balancer.net
 ad-cupid.com
 ad-delivery.net
+ad-maven.com
 ad-pay.de
 ad-rotator.com
 ad-score.com
@@ -700,20 +701,15 @@ ads10.speedbit.com
 ads180.com
 ads2.contentabc.com
 ads2.femmefab.nl
-ads2.gamecity.net
 ads2.virtual-nights.com
 ads2.xnet.cz
 ads2004.treiberupdate.de
 ads24h.net
 ads3-adnow.com
-ads3.gamecity.net
 ads3.virtual-nights.com
-ads4.gamecity.net
 ads4.virtual-nights.com
 ads4homes.com
 ads5.virtual-nights.com
-ads6.gamecity.net
-ads7.gamecity.net
 adsafeprotected.com
 adsatt.abc.starwave.com
 adsatt.abcnews.starwave.com
@@ -770,7 +766,6 @@ adserver.oddschecker.com
 adserver.omroepzeeland.nl
 adserver.pampa.com.br
 adserver.piksel.mk
-adserver.pl
 adserver.portugalmail.net
 adserver.pressboard.ca
 adserver.sanomawsoy.fi
@@ -1322,7 +1317,6 @@ audience.media
 audience2media.com
 audienceinsights.com
 audio.ad
-audit.median.hu
 audit.webinform.hu
 augur.io
 aumo123usedcarscom.112.2o7.net
@@ -1368,6 +1362,7 @@ awempire.com
 awin1.com
 awstrack.me
 awzbijw.com
+axcii.com
 axonix.com
 ay.delivery
 ayads.co
@@ -2217,7 +2212,6 @@ dpiprodesntls.112.2o7.net
 dpu.samsungelectronics.com
 dq95d35.com
 dragerwerk.122.2o7.net
-dragonbats.com
 dreamhome.112.2o7.net
 drumcash.com
 dsp.colpirio.com
@@ -2297,7 +2291,6 @@ engage.tines.com
 engage.windows.com
 engagebdr.com
 engageya.com
-engine.espace.netavenir.com
 engineertrick.com
 enginenetwork.com
 enormousearth.com
@@ -2437,6 +2430,7 @@ feedmob.com
 feelwarmth.com
 femalecook.com
 fenxi.com
+fhvfd.com
 figlobal.112.2o7.net
 figsprotein.com
 figurehunter.net
@@ -2709,7 +2703,6 @@ hits.sh
 hits.theguardian.com
 hits4me.com
 hitslink.com
-hittail.com
 hlok.qertewrt.com
 hocgeese.com
 hollowafterthought.com
@@ -2759,7 +2752,6 @@ i-i.lt
 i305175.net
 ia.iinfo.cz
 iad.anm.co.uk
-iadnet.com
 ibibo.112.2o7.net
 ibillboard.com
 ice.112.2o7.net
@@ -3052,6 +3044,7 @@ linkreferral.com
 links-ranking.de
 links.email.crunchbase.com
 links.housekeep.com
+links.prosservice.fr
 links.zoopla.co.uk
 linksoutside.com
 linkstable.com
@@ -3502,6 +3495,7 @@ natgeophoto.112.2o7.net
 natgeotravelermagcom.112.2o7.net
 natgeovideo.112.2o7.net
 nationalgeographic.112.2o7.net
+native123.com
 nativeroll.tv
 navegg.com
 navigator.io
@@ -4365,7 +4359,6 @@ shockinggrass.com
 shopping.112.2o7.net
 shoppingads.com
 showads.pubmatic.com
-shredform.com
 shrillspoon.com
 shxtrk.com
 sicksmash.com
@@ -4795,6 +4788,7 @@ sponsorpro.de
 spookysleet.com
 spoonballoon.com
 sportingnews.122.2o7.net
+sportswidows.com
 spotlessstamp.com
 spotscenered.info
 spotx.tv
@@ -5019,7 +5013,6 @@ terriblethumb.com
 tescostores.122.2o7.net
 text-link-ads.com
 textad.sexsearch.com
-textads.biz
 textlinks.com
 tfag.de
 tgn.122.2o7.net
@@ -5031,7 +5024,6 @@ theadex.com
 theadhost.com
 theadsparks.com
 thebicyclehut.com
-thebugs.ws
 thecrazychili.com
 thedailystarcom.112.2o7.net
 thegroup.112.2o7.net
@@ -5097,6 +5089,7 @@ top100-images.rambler.ru
 top100.mafia.ru
 top123.ro
 top20free.com
+topicspin.com
 toplist.cz
 toplist.pornhost.com
 toplista.mw.hu
